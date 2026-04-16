@@ -1,0 +1,236 @@
+﻿import java.awt.EventQueue;
+import java.io.*;
+import javax.swing.*;
+
+
+public class LoginFrame extends JFrame {
+
+    private JTextField txtUser;
+    private JPasswordField txtPass;
+    private static String user = " ";
+    private static String pass = " ";
+    
+    public static void main(String[] args) {
+		EventQueue.invokeLater(() -> {
+			try {
+				LoginFrame frame = new LoginFrame();
+				frame.setVisible(true);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		});
+	}
+
+    public LoginFrame() {
+        setTitle("Login");
+        setSize(350, 250);
+        setLayout(null);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+
+        JLabel lblUser = new JLabel("Username:");
+        lblUser.setBounds(30, 10, 80, 25);
+        add(lblUser);
+
+        txtUser = new JTextField();
+        txtUser.setBounds(120, 10, 120, 25);
+        add(txtUser);
+
+        JLabel lblPass = new JLabel("Password:");
+        lblPass.setBounds(30, 40, 80, 25);
+        add(lblPass);
+
+        txtPass = new JPasswordField();
+        txtPass.setBounds(120, 40, 120, 25);
+        add(txtPass);
+
+        JCheckBox chkShowPassword = new JCheckBox("Show");
+        chkShowPassword.setBounds(250, 40, 60, 25);
+        chkShowPassword.addActionListener(e -> {
+            if (chkShowPassword.isSelected()) {
+                txtPass.setEchoChar((char) 0);
+            } else {
+                txtPass.setEchoChar('*');
+            }
+        });
+        add(chkShowPassword);
+
+        JLabel lblog = new JLabel("Register");
+        lblog.setBounds(30, 70, 80, 25);
+        add(lblog);
+        
+        JButton btnRegister = new JButton("Register");
+        btnRegister.setBounds(120, 70, 120, 25);
+        add(btnRegister);
+
+        JButton btnChangePassword = new JButton("Change Password");
+        btnChangePassword.setBounds(250, 70, 80, 25);
+        add(btnChangePassword);
+
+        JButton btnLogin = new JButton("Login");
+        btnLogin.setBounds(30, 110, 80, 30);
+        add(btnLogin);
+
+        JButton btnBack = new JButton("Back");
+        btnBack.setBounds(120, 110, 80, 30);
+        add(btnBack);
+
+        
+        btnLogin.addActionListener(e ->{
+            user = txtUser.getText().trim();
+            pass = new String(txtPass.getPassword()).trim();
+            if(getUsernameFromFile(user, pass)) {
+                JOptionPane.showMessageDialog(this, "Login success!");
+
+                TCPClientFrame.setupLookAndFeel();
+                TCPClientFrame manager = new TCPClientFrame(user);
+                manager.setVisible(true);
+
+                this.dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "Sai tài khoản!");
+            }
+        });
+        btnBack.addActionListener(e -> {
+            MainMenu.setupLookAndFeel();
+            new MainMenu().setVisible(true);
+            this.dispose();
+        });
+        btnRegister.addActionListener(e -> {
+            new RegisterFrame().setVisible(true);
+            this.dispose();
+        });
+        
+        btnChangePassword.addActionListener(e -> showChangePasswordDialog());
+        
+        setLocationRelativeTo(null);
+    }
+    
+    private void showChangePasswordDialog() {
+        JDialog dialog = new JDialog((JFrame) SwingUtilities.getWindowAncestor(this), "Change Password", true);
+        dialog.setSize(300, 180);
+        dialog.setLayout(null);
+        dialog.setLocationRelativeTo(this);
+        
+        JLabel lblUser = new JLabel("Username:");
+        lblUser.setBounds(20, 10, 80, 25);
+        dialog.add(lblUser);
+        
+        JTextField txtUsername = new JTextField();
+        txtUsername.setBounds(110, 10, 150, 25);
+        dialog.add(txtUsername);
+        
+        JLabel lblOldPass = new JLabel("Old Password:");
+        lblOldPass.setBounds(20, 40, 80, 25);
+        dialog.add(lblOldPass);
+        
+        JPasswordField txtOldPass = new JPasswordField();
+        txtOldPass.setBounds(110, 40, 150, 25);
+        dialog.add(txtOldPass);
+        
+        JLabel lblNewPass = new JLabel("New Password:");
+        lblNewPass.setBounds(20, 70, 80, 25);
+        dialog.add(lblNewPass);
+        
+        JPasswordField txtNewPass = new JPasswordField();
+        txtNewPass.setBounds(110, 70, 150, 25);
+        dialog.add(txtNewPass);
+        
+        JButton btnChange = new JButton("Change");
+        btnChange.setBounds(60, 110, 80, 30);
+        btnChange.addActionListener(e -> {
+            String username = txtUsername.getText().trim();
+            String oldPass = new String(txtOldPass.getPassword());
+            String newPass = new String(txtNewPass.getPassword());
+            
+            if (username.isEmpty() || oldPass.isEmpty() || newPass.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "All fields are required!", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            if (changePasswordInFile(username, oldPass, newPass)) {
+                JOptionPane.showMessageDialog(dialog, "Password changed successfully!", "Success", JOptionPane.INFORMATION_MESSAGE);
+                dialog.dispose();
+            } else {
+                JOptionPane.showMessageDialog(dialog, "Invalid username or old password!", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        dialog.add(btnChange);
+        
+        JButton btnClose = new JButton("Close");
+        btnClose.setBounds(160, 110, 80, 30);
+        btnClose.addActionListener(e -> dialog.dispose());
+        dialog.add(btnClose);
+        
+        dialog.setVisible(true);
+    }
+    
+    private boolean changePasswordInFile(String username, String oldPass, String newPass) {
+        try {
+            File file = new File("data.txt");
+            BufferedReader reader = new BufferedReader(new FileReader(file));
+            StringBuilder content = new StringBuilder();
+            String line;
+            boolean found = false;
+            
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(",");
+                if (parts.length >= 2) {
+                    String storedUser = parts[0].trim();
+                    String storedPass = parts[1].trim();
+                    
+                    if (storedUser.equals(username) && storedPass.equals(oldPass)) {
+                        content.append(username).append(",").append(newPass).append("\n");
+                        found = true;
+                    } else {
+                        content.append(line).append("\n");
+                    }
+                } else {
+                    content.append(line).append("\n");
+                }
+            }
+            reader.close();
+            
+            if (found) {
+                BufferedWriter writer = new BufferedWriter(new FileWriter(file));
+                String output = content.toString();
+                // Remove trailing newline if exists, then ensure single newline at end
+                if (output.endsWith("\n")) {
+                    output = output.substring(0, output.length() - 1);
+                }
+                writer.write(output);
+                if (output.length() > 0) {
+                    writer.write("\n");
+                }
+                writer.close();
+                return true;
+            }
+            return false;
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            return false;
+        }
+    }
+    private boolean getUsernameFromFile(String user, String pass) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("data.txt"))) {
+            String line;
+            if (user.isEmpty() || pass.isEmpty()) {
+                return false; 
+            }              
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(",");
+                if (parts.length >= 2) {
+                    String username = parts[0].trim();
+                    String password = parts[1].trim();
+                    if (user.trim().equals(username) && pass.trim().equals(password)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+        return false; 
+    }    
+}
+
+
