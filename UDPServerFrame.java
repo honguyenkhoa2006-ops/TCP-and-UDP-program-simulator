@@ -72,7 +72,7 @@ public class UDPServerFrame extends JFrame {
 // ==================== UDP SERVER COMBINED PANEL ====================
 class UDPServerCombinedPanel extends JPanel {
     private JTextField txtPort;
-    private JTextField txtFilePath;
+
     private JTextField txtSelectedFile;
     private JTextField inputMessage;
     private JTextArea chattingHistory;
@@ -151,14 +151,6 @@ class UDPServerCombinedPanel extends JPanel {
         txtPort = new JTextField("", 8);
         txtPort.setFont(new Font("Times New Roman", Font.PLAIN, 14));
         topPanel.add(txtPort);
-
-        JLabel lblFilePath = new JLabel("File Path:");
-        lblFilePath.setFont(new Font("Times New Roman", Font.BOLD, 14));
-        topPanel.add(lblFilePath);
-
-        txtFilePath = new JTextField("", 15);
-        txtFilePath.setFont(new Font("Times New Roman", Font.PLAIN, 14));
-        topPanel.add(txtFilePath);
 
         btnStart = new JButton("Start");
         btnStart.setFont(new Font("Times New Roman", Font.BOLD, 12));
@@ -456,7 +448,7 @@ class UDPServerCombinedPanel extends JPanel {
                             String fileName = fileParts[1];
                             long fileSize = Long.parseLong(fileParts[2]);
                             
-                            String serverPath = txtFilePath.getText().trim();
+                            String serverPath = "";
                             try {
                                 FileReceiveState state = new FileReceiveState(fileName, fileSize, serverPath);
                                 fileReceiveStates.put(clientKey, state);
@@ -641,7 +633,6 @@ class UDPServerCombinedPanel extends JPanel {
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             java.io.File selectedFile = fileChooser.getSelectedFile();
-            txtFilePath.setText(selectedFile.getAbsolutePath());
             appendHistory("📂 Transfer folder selected: " + selectedFile.getAbsolutePath());
             appendHistory("[UDP] Files will be saved to this folder.");
             viewAvailableFiles();
@@ -649,11 +640,7 @@ class UDPServerCombinedPanel extends JPanel {
     }
 
     private void selectSingleFile() {
-        String folderPath = txtFilePath.getText().trim();
         JFileChooser fileChooser = new JFileChooser();
-        if (!folderPath.isEmpty()) {
-            fileChooser.setCurrentDirectory(new java.io.File(folderPath));
-        }
         fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
@@ -664,12 +651,7 @@ class UDPServerCombinedPanel extends JPanel {
     }
 
     private void viewAvailableFiles() {
-        String path = txtFilePath.getText().trim();
-        if (path.isEmpty()) {
-            availableFilesArea.setText("📂 Please set a file path first (Browse button)");
-            return;
-        }
-
+        String path = ".";
         java.io.File directory = new java.io.File(path);
         if (!directory.exists() || !directory.isDirectory()) {
             availableFilesArea.setText("❌ Invalid directory: " + path);
@@ -678,12 +660,12 @@ class UDPServerCombinedPanel extends JPanel {
 
         java.io.File[] files = directory.listFiles();
         if (files == null || files.length == 0) {
-            availableFilesArea.setText("📭 No files found in: " + path);
+            availableFilesArea.setText("📭 No files found in current directory");
             return;
         }
 
         StringBuilder fileList = new StringBuilder();
-        fileList.append("📁 Available Files in: ").append(path).append("\n");
+        fileList.append("📁 Available Files\n");
         for (int i = 0; i < 80; i++) fileList.append("=");
         fileList.append("\n");
         fileList.append("(Use 'Select File' button to choose a file)\n\n");

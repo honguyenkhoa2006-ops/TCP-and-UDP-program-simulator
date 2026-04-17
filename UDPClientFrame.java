@@ -85,10 +85,6 @@ public class UDPClientFrame extends JFrame {
         lblStatus.setFont(new Font("Times New Roman", Font.BOLD, 11));
         topPanel.add(lblStatus);
 
-        JButton btnBrowse = new JButton("Browse");
-        btnBrowse.setFont(new Font("Times New Roman", Font.BOLD, 12));
-        topPanel.add(btnBrowse);
-
         contentPane.add(topPanel, BorderLayout.NORTH);
 
         // Split pane
@@ -116,8 +112,6 @@ public class UDPClientFrame extends JFrame {
             btnStart.setEnabled(true);
             btnStop.setEnabled(false);
         });
-
-        btnBrowse.addActionListener(e -> fileTransferPanel.browseFile());
 
         // Bottom
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
@@ -605,7 +599,7 @@ class UDPChatPanel extends JPanel implements Runnable {
 
 // ==================== UDP FILE TRANSFER PANEL ====================
 class UDPFileTransferPanel extends JPanel {
-    private JTextField txtFilePath;
+
     private JTextArea transferHistory;
     private JProgressBar progressBar;
     private JButton btnSend;
@@ -649,15 +643,6 @@ class UDPFileTransferPanel extends JPanel {
         JPanel filePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
         filePanel.setBackground(Color.WHITE);
 
-        JLabel lblFile = new JLabel("File:");
-        lblFile.setFont(new Font("Times New Roman", Font.BOLD, 12));
-        filePanel.add(lblFile);
-
-        txtFilePath = new JTextField(20);
-        txtFilePath.setFont(new Font("Times New Roman", Font.PLAIN, 12));
-        txtFilePath.setBackground(Color.WHITE);
-        filePanel.add(txtFilePath);
-
         btnSend = new JButton("Send");
         btnSend.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnSend.setEnabled(false);
@@ -694,14 +679,7 @@ class UDPFileTransferPanel extends JPanel {
         btnReceive.setEnabled(connected);
     }
 
-    public void browseFile() {
-        JFileChooser fileChooser = new JFileChooser();
-        int result = fileChooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-            txtFilePath.setText(selectedFile.getAbsolutePath());
-        }
-    }
+
 
     private void sendFile() {
         if (!connected || !chatPanel.isConnected()) {
@@ -709,15 +687,15 @@ class UDPFileTransferPanel extends JPanel {
             return;
         }
 
-        String filePath = txtFilePath.getText().trim();
-        if (filePath.isEmpty()) {
-            appendHistory("Please select a file first!");
+        JFileChooser fileChooser = new JFileChooser();
+        int result = fileChooser.showOpenDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) {
             return;
         }
-
-        File file = new File(filePath);
+        
+        File file = fileChooser.getSelectedFile();
         if (!file.exists()) {
-            appendHistory("File not found: " + filePath);
+            appendHistory("File not found: " + file.getAbsolutePath());
             return;
         }
 

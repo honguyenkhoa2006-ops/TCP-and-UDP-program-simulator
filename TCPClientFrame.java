@@ -74,10 +74,6 @@ public class TCPClientFrame extends JFrame {
         lblStatus.setFont(new Font("Times New Roman", Font.BOLD, 11));
         topPanel.add(lblStatus);
 
-        JButton btnBrowse = new JButton("Browse");
-        btnBrowse.setFont(new Font("Times New Roman", Font.BOLD, 12));
-        topPanel.add(btnBrowse);
-
         contentPane.add(topPanel, BorderLayout.NORTH);
 
         // Split pane
@@ -105,8 +101,6 @@ public class TCPClientFrame extends JFrame {
             btnStart.setEnabled(true);
             btnStop.setEnabled(false);
         });
-
-        btnBrowse.addActionListener(e -> fileTransferPanel.browseFile());
 
         // Bottom
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
@@ -548,11 +542,13 @@ class TCPChatPanel extends JPanel implements Runnable {
         String action = parts[1];
 
         if (action.equals("SEND_FROM_SERVER")) {
-            // FILE|SEND_FROM_SERVER|filename|filesize
+            // FILE|SEND_FROM_SERVER|filename|filesize|sender_username
             if (parts.length >= 4) {
                 try {
                     String filename = parts[2];
                     long fileSize = Long.parseLong(parts[3]);
+                    String senderUsername = parts.length >= 5 ? parts[4] : "Unknown";
+                    appendChat("[System] " + senderUsername + " shared file: " + filename);
                     receiveFileFromServer(filename, fileSize);
                 } catch (Exception e) {
                     appendChat("[System] File transfer error: " + e.getMessage());
@@ -610,11 +606,10 @@ class TCPChatPanel extends JPanel implements Runnable {
 
 // ==================== TCP FILE TRANSFER PANEL ====================
 class TCPFileTransferPanel extends JPanel {
-    private JTextField txtFilePath;
+
     private JTextArea transferHistory;
     private JProgressBar progressBar;
     private JButton btnSend;
-    private JButton btnReceive;
     
     private TCPChatPanel chatPanel;
     private volatile boolean connected = false;
@@ -653,30 +648,15 @@ class TCPFileTransferPanel extends JPanel {
         JPanel bottomPanel = new JPanel(new BorderLayout(10, 10));
         bottomPanel.setBackground(Color.WHITE);
 
-        // File path and buttons
+        // Buttons
         JPanel filePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
         filePanel.setBackground(Color.WHITE);
-
-        JLabel lblFile = new JLabel("File:");
-        lblFile.setFont(new Font("Times New Roman", Font.BOLD, 12));
-        filePanel.add(lblFile);
-
-        txtFilePath = new JTextField(20);
-        txtFilePath.setFont(new Font("Times New Roman", Font.PLAIN, 12));
-        txtFilePath.setBackground(Color.WHITE);
-        filePanel.add(txtFilePath);
 
         btnSend = new JButton("Send");
         btnSend.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnSend.setEnabled(false);
         btnSend.addActionListener(e -> sendFile());
         filePanel.add(btnSend);
-
-        btnReceive = new JButton("Receive");
-        btnReceive.setFont(new Font("Times New Roman", Font.BOLD, 12));
-        btnReceive.setEnabled(false);
-        btnReceive.addActionListener(e -> receiveFile());
-        filePanel.add(btnReceive);
 
         bottomPanel.add(filePanel, BorderLayout.NORTH);
 
@@ -700,17 +680,9 @@ class TCPFileTransferPanel extends JPanel {
     public void setConnected(boolean connected) {
         this.connected = connected;
         btnSend.setEnabled(connected);
-        btnReceive.setEnabled(connected);
     }
 
-    public void browseFile() {
-        JFileChooser fileChooser = new JFileChooser();
-        int result = fileChooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-            txtFilePath.setText(selectedFile.getAbsolutePath());
-        }
-    }
+
 
     private void sendFile() {
         if (!connected || !chatPanel.isConnected()) {
@@ -718,13 +690,13 @@ class TCPFileTransferPanel extends JPanel {
             return;
         }
 
-        String filePath = txtFilePath.getText().trim();
-        if (filePath.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Select a file!", "Error", JOptionPane.ERROR_MESSAGE);
+        JFileChooser fileChooser = new JFileChooser();
+        int result = fileChooser.showOpenDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) {
             return;
         }
-
-        File file = new File(filePath);
+        
+        File file = fileChooser.getSelectedFile();
         if (!file.exists()) {
             JOptionPane.showMessageDialog(this, "File not found!", "Error", JOptionPane.ERROR_MESSAGE);
             return;
@@ -780,9 +752,8 @@ class TCPFileTransferPanel extends JPanel {
             return;
         }
 
-        String filePath = txtFilePath.getText().trim();
-        if (filePath.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Enter filename!", "Error", JOptionPane.ERROR_MESSAGE);
+        String filePath = JOptionPane.showInputDialog(this, "Enter filename to request:", "");
+        if (filePath == null || filePath.trim().isEmpty()) {
             return;
         }
 

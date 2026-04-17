@@ -73,7 +73,7 @@ public class TCPServerFrame extends JFrame {
 // ==================== TCP SERVER COMBINED PANEL ====================
 class TCPServerCombinedPanel extends JPanel {
     private JTextField txtPort;
-    private JTextField txtFilePath;
+
     private JTextField txtSelectedFile;
     private JTextField inputMessage;
     private JTextArea chattingHistory;
@@ -108,14 +108,6 @@ class TCPServerCombinedPanel extends JPanel {
         txtPort = new JTextField("", 8);
         txtPort.setFont(new Font("Times New Roman", Font.PLAIN, 14));
         topPanel.add(txtPort);
-
-        JLabel lblFilePath = new JLabel("File Path:");
-        lblFilePath.setFont(new Font("Times New Roman", Font.BOLD, 14));
-        topPanel.add(lblFilePath);
-
-        txtFilePath = new JTextField("", 15);
-        txtFilePath.setFont(new Font("Times New Roman", Font.PLAIN, 14));
-        topPanel.add(txtFilePath);
 
         btnStart = new JButton("Start");
         btnStart.setFont(new Font("Times New Roman", Font.BOLD, 12));
@@ -478,14 +470,13 @@ class TCPServerCombinedPanel extends JPanel {
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
-            txtFilePath.setText(selectedFile.getAbsolutePath());
-            appendHistory("📂 File path set to: " + selectedFile.getAbsolutePath());
+            appendHistory("📂 File folder selected: " + selectedFile.getAbsolutePath());
             viewAvailableFiles();
         }
     }
 
     private void selectSingleFile() {
-        String folderPath = txtFilePath.getText().trim();
+        String folderPath = "";
         JFileChooser fileChooser = new JFileChooser();
         if (!folderPath.isEmpty()) {
             fileChooser.setCurrentDirectory(new File(folderPath));
@@ -500,12 +491,7 @@ class TCPServerCombinedPanel extends JPanel {
     }
 
     private void viewAvailableFiles() {
-        String path = txtFilePath.getText().trim();
-        if (path.isEmpty()) {
-            availableFilesArea.setText("📂 Please set a file path first (Browse button)");
-            return;
-        }
-
+        String path = ".";
         File directory = new File(path);
         if (!directory.exists() || !directory.isDirectory()) {
             availableFilesArea.setText("❌ Invalid directory: " + path);
@@ -514,12 +500,12 @@ class TCPServerCombinedPanel extends JPanel {
 
         File[] files = directory.listFiles();
         if (files == null || files.length == 0) {
-            availableFilesArea.setText("📭 No files found in: " + path);
+            availableFilesArea.setText("📭 No files found in current directory");
             return;
         }
 
         StringBuilder fileList = new StringBuilder();
-        fileList.append("📁 Available Files in: ").append(path).append("\n");
+        fileList.append("📁 Available Files\n");
         for (int i = 0; i < 80; i++) fileList.append("=");
         fileList.append("\n");
         fileList.append("(Use 'Select File' button to choose a file)\n\n");
@@ -648,7 +634,7 @@ class TCPServerCombinedPanel extends JPanel {
             try {
                 username = "User_" + clientId;
                 chatClients.put(clientId, this);
-                appendChat("✅ Client #" + clientId + " connected.");
+                appendChat("✅ " + username + " connected.");
                 chatBroadcast("[System] " + username + " joined the chat.", clientId);
 
                 // Handle chat and file messages
@@ -841,18 +827,10 @@ class TCPServerCombinedPanel extends JPanel {
         private void receiveFile(String filename, long fileSize) throws IOException {
             if (fileSize <= 0) return;
             
-            String[] serverRootPath = {null};
-            try {
-                SwingUtilities.invokeAndWait(() -> {
-                    serverRootPath[0] = txtFilePath.getText().trim();
-                });
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            
+            String serverRootPath = "";
             File file = new File(filename);
-            if (!file.isAbsolute() && serverRootPath[0] != null && !serverRootPath[0].isEmpty()) {
-                file = new File(serverRootPath[0], filename);
+            if (!file.isAbsolute() && !serverRootPath.isEmpty()) {
+                file = new File(serverRootPath, filename);
             }
             
             FileOutputStream fos = new FileOutputStream(file);
@@ -875,6 +853,10 @@ class TCPServerCombinedPanel extends JPanel {
                     dos.writeUTF("FILE|RECEIVED");
                     dos.flush();
                 }
+                
+                // Broadcast file to room members or all clients
+                broadcastFileToRecipients(file, filename, fileSize);
+                
             } catch (IOException ex) {
                 appendHistory("Error receiving file: " + ex.getMessage());
                 throw ex;
@@ -882,21 +864,76 @@ class TCPServerCombinedPanel extends JPanel {
                 try { fos.close(); } catch (Exception ignored) {}
             }
         }
+        
+        private void broadcastFileToRecipients(File file, String filename, long fileSize) {
+            new Thread(() -> {
+                try {
+                    java.util.List<Integer> recipientIds = new java.util.ArrayList<>();
+                    
+                    if (!currentRoom.isEmpty()) {
+                        // Send to all clients in the same room (except sender)
+                        Room room = rooms.get(currentRoom);
+                        if (room != null) {
+                            for (Integer memberId : room.getMembers().keySet()) {
+                                if (memberId != clientId) {
+                                    recipientIds.add(memberId);
+                                }
+                            }
+                        }
+                        appendChat("[Room: " + currentRoom + "] " + username + " shared file: " + filename);
+                    } else {
+                        // Send to all other connected clients (not in room)
+                        for (Integer otherClientId : chatClients.keySet()) {
+                            if (otherClientId != clientId) {
+                                recipientIds.add(otherClientId);
+                            }
+                        }
+                        appendChat(username + " shared file: " + filename);
+                    }
+                    
+                    // Send file to each recipient
+                    for (Integer recipientId : recipientIds) {
+                        ClientCombinedHandler recipient = chatClients.get(recipientId);
+                        if (recipient != null && recipient.running) {
+                            try {
+                                synchronized (recipient.dos) {
+                                    recipient.dos.writeUTF("FILE|SEND_FROM_SERVER|" + filename + "|" + fileSize + "|" + username);
+                                    recipient.dos.flush();
+                                }
+                                
+                                // Send file content
+                                FileInputStream fis = new FileInputStream(file);
+                                byte[] buffer = new byte[4096];
+                                int bytesRead;
+                                
+                                try {
+                                    while ((bytesRead = fis.read(buffer)) > 0) {
+                                        synchronized (recipient.dos) {
+                                            recipient.dos.write(buffer, 0, bytesRead);
+                                        }
+                                    }
+                                    synchronized (recipient.dos) {
+                                        recipient.dos.flush();
+                                    }
+                                } finally {
+                                    fis.close();
+                                }
+                                
+                                appendHistory("File broadcasted to client #" + recipientId + ": " + filename);
+                            } catch (Exception e) {
+                                appendHistory("Error sending file to client #" + recipientId + ": " + e.getMessage());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    appendHistory("Error in file broadcast: " + e.getMessage());
+                }
+            }).start();
+        }
 
         private void sendFile(String filename) throws IOException {
-            String[] serverRootPath = {null};
-            try {
-                SwingUtilities.invokeAndWait(() -> {
-                    serverRootPath[0] = txtFilePath.getText().trim();
-                });
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            
-            File file = new File(filename);
-            if (!file.isAbsolute() && serverRootPath[0] != null && !serverRootPath[0].isEmpty()) {
-                file = new File(serverRootPath[0], filename);
-            }
+            String serverRootPath = "";
+            File file = new File(serverRootPath.isEmpty() ? filename : serverRootPath + File.separator + filename);
             
             if (!file.exists()) {
                 synchronized (dos) {
