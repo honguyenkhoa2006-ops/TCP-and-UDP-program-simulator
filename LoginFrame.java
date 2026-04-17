@@ -1,6 +1,7 @@
 ﻿import java.awt.EventQueue;
 import java.io.*;
 import javax.swing.*;
+import java.util.HashMap;
 
 
 public class LoginFrame extends JFrame {
@@ -9,6 +10,11 @@ public class LoginFrame extends JFrame {
     private JPasswordField txtPass;
     private static String user = " ";
     private static String pass = " ";
+    private static HashMap<String, String> userCredentials = new HashMap<>();
+    
+    static {
+        loadUserCredentialsFromFile("data.txt");
+    }
     
     public static void main(String[] args) {
 		EventQueue.invokeLater(() -> {
@@ -165,71 +171,52 @@ public class LoginFrame extends JFrame {
     }
     
     private boolean changePasswordInFile(String username, String oldPass, String newPass) {
-        try {
-            File file = new File("data.txt");
-            BufferedReader reader = new BufferedReader(new FileReader(file));
-            StringBuilder content = new StringBuilder();
-            String line;
-            boolean found = false;
-            
-            while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(",");
-                if (parts.length >= 2) {
-                    String storedUser = parts[0].trim();
-                    String storedPass = parts[1].trim();
-                    
-                    if (storedUser.equals(username) && storedPass.equals(oldPass)) {
-                        content.append(username).append(",").append(newPass).append("\n");
-                        found = true;
-                    } else {
-                        content.append(line).append("\n");
-                    }
-                } else {
-                    content.append(line).append("\n");
-                }
-            }
-            reader.close();
-            
-            if (found) {
-                BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-                String output = content.toString();
-                // Remove trailing newline if exists, then ensure single newline at end
-                if (output.endsWith("\n")) {
-                    output = output.substring(0, output.length() - 1);
-                }
-                writer.write(output);
-                if (output.length() > 0) {
-                    writer.write("\n");
-                }
-                writer.close();
+        // Check if user exists and old password is correct using HashMap
+        if (userCredentials.containsKey(username)) {
+            String storedPass = userCredentials.get(username);
+            if (storedPass.equals(oldPass)) {
+                // Update HashMap
+                userCredentials.put(username, newPass);
+                // Write updated credentials back to file
+                writeUserCredentialsToFile("data.txt");
                 return true;
             }
-            return false;
-        } catch (IOException ex) {
-            ex.printStackTrace();
-            return false;
         }
+        return false;
     }
     private boolean getUsernameFromFile(String user, String pass) {
-        try (BufferedReader reader = new BufferedReader(new FileReader("data.txt"))) {
+        if (user.isEmpty() || pass.isEmpty()) {
+            return false; 
+        }
+        // Check credentials using HashMap
+        return userCredentials.containsKey(user) && userCredentials.get(user).equals(pass);
+    }
+    
+    private static void loadUserCredentialsFromFile(String filename) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
             String line;
-            if (user.isEmpty() || pass.isEmpty()) {
-                return false; 
-            }              
             while ((line = reader.readLine()) != null) {
                 String[] parts = line.split(",");
                 if (parts.length >= 2) {
                     String username = parts[0].trim();
                     String password = parts[1].trim();
-                    if (user.trim().equals(username) && pass.trim().equals(password)) {
-                        return true;
-                    }
+                    userCredentials.put(username, password);
                 }
             }
         } catch (IOException ex) {
             ex.printStackTrace();
         }
-        return false; 
+    }
+    
+    private static void writeUserCredentialsToFile(String filename) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename))) {
+            for (String username : userCredentials.keySet()) {
+                writer.write(username + "," + userCredentials.get(username));
+                writer.newLine();
+            }
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
     }    
 }
 
