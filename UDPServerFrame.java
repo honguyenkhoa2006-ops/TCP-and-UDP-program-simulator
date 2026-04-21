@@ -448,7 +448,7 @@ class UDPServerCombinedPanel extends JPanel {
 
     private void combinedReceiveLoop() {
         try {
-            byte[] buffer = new byte[65535]; // UDP max packet size
+            byte[] buffer = new byte[65507]; // UDP max payload size (65535 - 28 bytes for IP/UDP headers)
             while (chatServerRunning && fileServerRunning) {
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -529,12 +529,12 @@ class UDPServerCombinedPanel extends JPanel {
                                 chatSocket.send(responsePacket);
                             }
                         }
-                    } else if (message.startsWith("FILEINFO|")) {
-                        // FILE TRANSFER HEADER - Initialize file receive state
-                        String[] fileParts = message.split("\\|", 3);
-                        if (fileParts.length >= 3) {
-                            String fileName = fileParts[1];
-                            long fileSize = Long.parseLong(fileParts[2]);
+                    } else if (message.startsWith("FILE|SEND|")) {
+                        // FILE TRANSFER HEADER - Initialize file receive state (updated protocol)
+                        String[] fileParts = message.split("\\|", 4);
+                        if (fileParts.length >= 4) {
+                            String fileName = fileParts[2];
+                            long fileSize = Long.parseLong(fileParts[3]);
 
                             String serverPath = "";
                             try {
@@ -546,32 +546,36 @@ class UDPServerCombinedPanel extends JPanel {
                                 appendHistory("[UDP ERROR] Failed to create file: " + ex.getMessage());
                             }
                         }
-                    } else if (message.startsWith("END|")) {
-                        // FILE TRANSFER END - Close file and cleanup
+                    } else if (message.startsWith("FILE|END")) {
+                        // FILE TRANSFER END - Close file and cleanup (updated protocol)
                         FileReceiveState state = fileReceiveStates.remove(clientKey);
                         if (state != null) {
                             state.close();
                             appendHistory("[UDP FILE] From " + clientKey + ": Transfer complete (" + state.totalReceived
                                     + " bytes received)");
                             appendHistory("[UDP FILE] Saved to: " + state.getFilePath());
+                            
+                            // Broadcast received file to other clients (similar to TCP)
+                            ClientInfo senderInfo = info;
+                            String fileName = new File(state.getFilePath()).getName();
+                            String fileNameWithoutPrefix = fileName.startsWith("received_") ? 
+                                fileName.substring("received_".length()) : fileName;
+                            broadcastFileToRecipients(state.getFilePath(), fileNameWithoutPrefix, state.totalReceived, clientKey, senderInfo);
                         }
-                    } else if (packet.getLength() > 0 && packet.getData()[0] != 0) {
+                    } else if (packet.getLength() > 0) {
                         // DATA PACKET - Could be file data or chat message
                         String messageStr = new String(dataBytes, "UTF-8");
 
-                        // Check if this is file data (starts with packet number bytes) or chat message
-                        boolean couldBeFileData = packet.getLength() >= 4;
                         FileReceiveState state = fileReceiveStates.get(clientKey);
 
-                        if (state != null && couldBeFileData) {
-                            // Try to write as file data - skip first 4 bytes (packet number)
+                        if (state != null) {
+                            // During file transfer, store data directly without expecting packet number prefix
                             try {
-                                state.writeData(dataBytes, 4, dataBytes.length - 4);
+                                state.writeData(dataBytes, 0, dataBytes.length);
                             } catch (IOException ex) {
                                 appendHistory("[UDP ERROR] Error writing file data: " + ex.getMessage());
                             }
-                        } else if (info != null && !messageStr.isEmpty() && !messageStr.startsWith("FILEINFO")
-                                && !messageStr.startsWith("END")) {
+                        } else if (info != null && !messageStr.isEmpty() && !messageStr.startsWith("FILE|")) {
                             // REGULAR CHAT MESSAGE - Only broadcast to clients in same room
                             appendChat("[" + info.room + "][" + info.username + "]: " + messageStr);
                             chatBroadcast("[" + info.username + "]: " + messageStr, clientKey, info.room);
@@ -733,6 +737,90 @@ class UDPServerCombinedPanel extends JPanel {
         chatBroadcast(message, excludeKey, null);
     }
 
+    // Broadcast received file to other clients (similar to TCP)
+    private void broadcastFileToRecipients(String filePath, String originalFileName, long fileSize, String senderClientKey, ClientInfo senderInfo) {
+        new Thread(() -> {
+            try {
+                java.io.File file = new java.io.File(filePath);
+                if (!file.exists()) {
+                    appendHistory("[UDP FILE] Error: File not found for broadcasting: " + filePath);
+                    return;
+                }
+
+                // Get sender's username
+                String senderUsername = (senderInfo != null) ? senderInfo.username : "Unknown";
+                String senderRoom = (senderInfo != null) ? senderInfo.room : "default";
+
+                // Find all recipient clients in the same room (or all if not in a room)
+                java.util.List<ClientInfo> recipients = new java.util.ArrayList<>();
+                for (ClientInfo client : chatClients.values()) {
+                    // Skip sender
+                    String clientKey = client.address.getHostAddress() + ":" + client.port;
+                    if (clientKey.equals(senderClientKey)) {
+                        continue;
+                    }
+
+                    // Only send to clients in the same room
+                    if (!client.room.equals(senderRoom)) {
+                        continue;
+                    }
+
+                    recipients.add(client);
+                }
+
+                if (recipients.isEmpty()) {
+                    appendChat("[UDP FILE] " + senderUsername + " shared file: " + originalFileName + " (no recipients in room)");
+                    return;
+                }
+
+                appendChat("[UDP FILE] " + senderUsername + " shared file: " + originalFileName + " to " + recipients.size() + " client(s) in room '" + senderRoom + "'");
+
+                // Send file to each recipient
+                for (ClientInfo recipient : recipients) {
+                    try {
+                        // Send FILE command: FILE|SEND_FROM_SERVER|filename|filesize|sender_username
+                        String fileCommand = "FILE|SEND_FROM_SERVER|" + originalFileName + "|" + fileSize + "|" + senderUsername;
+                        byte[] commandData = fileCommand.getBytes("UTF-8");
+                        DatagramPacket commandPacket = new DatagramPacket(commandData, commandData.length, 
+                                recipient.address, recipient.port);
+                        chatSocket.send(commandPacket);
+
+                        // Send file content in 4096-byte chunks
+                        java.io.FileInputStream fis = new java.io.FileInputStream(file);
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+
+                        try {
+                            while ((bytesRead = fis.read(buffer)) > 0) {
+                                DatagramPacket dataPacket = new DatagramPacket(buffer, bytesRead,
+                                        recipient.address, recipient.port);
+                                chatSocket.send(dataPacket);
+                            }
+                        } finally {
+                            fis.close();
+                        }
+
+                        // Small delay to ensure last packet is received before end marker
+                        Thread.sleep(100);
+
+                        // Send end marker
+                        String endMsg = "FILE|END";
+                        byte[] endData = endMsg.getBytes("UTF-8");
+                        DatagramPacket endPacket = new DatagramPacket(endData, endData.length,
+                                recipient.address, recipient.port);
+                        chatSocket.send(endPacket);
+
+                        appendHistory("[UDP FILE] Sent to " + recipient.username + " (" + fileSize + " bytes)");
+                    } catch (Exception ex) {
+                        appendHistory("[UDP FILE ERROR] Failed to send to " + recipient.username + ": " + ex.getMessage());
+                    }
+                }
+            } catch (Exception ex) {
+                appendHistory("[UDP FILE ERROR] " + ex.getMessage());
+            }
+        }).start();
+    }
+
     private void appendChat(String line) {
         SwingUtilities.invokeLater(() -> {
             chattingHistory.append(line + "\n");
@@ -781,41 +869,35 @@ class UDPServerCombinedPanel extends JPanel {
                             return;
                         }
 
-                        // Send file info via UDP message with UTF-8 encoding
-                        String fileInfo = "FILEINFO|" + file.getName() + "|" + file.length();
-                        byte[] infoBuffer = fileInfo.getBytes("UTF-8");
-                        DatagramPacket infoPacket = new DatagramPacket(infoBuffer, infoBuffer.length, client.address,
+                        // Send file command via UDP message with UTF-8 encoding (updated protocol)
+                        String fileCommand = "FILE|SEND|" + file.getName() + "|" + file.length();
+                        byte[] commandBuffer = fileCommand.getBytes("UTF-8");
+                        DatagramPacket commandPacket = new DatagramPacket(commandBuffer, commandBuffer.length, client.address,
                                 client.port);
-                        chatSocket.send(infoPacket);
+                        chatSocket.send(commandPacket);
 
-                        // Send file data in chunks
+                        // Send file data in chunks with larger buffer size (4096 bytes like TCP)
                         try (FileInputStream fis = new FileInputStream(file)) {
-                            byte[] buffer = new byte[512];
-                            int seqNum = 0;
+                            byte[] buffer = new byte[4096];
                             long totalSent = 0;
                             int read;
 
                             while ((read = fis.read(buffer)) > 0) {
-                                // Prepend sequence number (4 bytes) to data
-                                byte[] dataPacket = new byte[read + 4];
-                                dataPacket[0] = (byte) ((seqNum >> 24) & 0xFF);
-                                dataPacket[1] = (byte) ((seqNum >> 16) & 0xFF);
-                                dataPacket[2] = (byte) ((seqNum >> 8) & 0xFF);
-                                dataPacket[3] = (byte) (seqNum & 0xFF);
-                                System.arraycopy(buffer, 0, dataPacket, 4, read);
-
-                                DatagramPacket packet = new DatagramPacket(dataPacket, dataPacket.length,
+                                // Send data directly without sequence number prefix
+                                DatagramPacket packet = new DatagramPacket(buffer, read,
                                         client.address, client.port);
                                 chatSocket.send(packet);
 
                                 totalSent += read;
-                                seqNum++;
                                 int progress = (int) ((totalSent * 100) / file.length());
                                 updateProgress(progress);
                             }
 
-                            // Send END marker with UTF-8 encoding
-                            String endMarker = "END|" + file.getName();
+                            // Small delay to ensure last packet is received before end marker
+                            Thread.sleep(100);
+                            
+                            // Send END marker with UTF-8 encoding (updated protocol)
+                            String endMarker = "FILE|END";
                             byte[] endBuffer = endMarker.getBytes("UTF-8");
                             DatagramPacket endPacket = new DatagramPacket(endBuffer, endBuffer.length, client.address,
                                     client.port);
@@ -827,6 +909,8 @@ class UDPServerCombinedPanel extends JPanel {
                         appendHistory("Error: UTF-8 encoding not supported for file transfer");
                     } catch (IOException ex) {
                         appendHistory("Error sending to client " + client.username + ": " + ex.getMessage());
+                    } catch (InterruptedException ex) {
+                        appendHistory("File transfer interrupted: " + ex.getMessage());
                     }
                 }).start();
             }

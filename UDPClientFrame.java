@@ -451,77 +451,67 @@ public class UDPClientFrame extends JFrame {
                         byte[] data = packet.getData();
                         int length = packet.getLength();
 
-                        // Handle file data packets (if we're receiving a file and packet has 4+ bytes)
-                        if (receivingFile && length > 4) {
-                            // Check if this looks like a file data packet (first 4 bytes could be sequence
-                            // number)
-                            // Or if it looks like a text message starting with known markers
-                            String[] textStartMarkers = { "FILEINFO|", "END|" };
-                            boolean isTextMessage = false;
-
-                            try {
-                                String testMessage = new String(data, 0, Math.min(20, length), "UTF-8");
-                                for (String marker : textStartMarkers) {
-                                    if (testMessage.startsWith(marker)) {
-                                        isTextMessage = true;
-                                        break;
-                                    }
-                                }
-                            } catch (Exception e) {
-                                // If we can't convert to string safely, it's probably binary data
-                                isTextMessage = false;
-                            }
-
-                            if (!isTextMessage && length > 4) {
-                                // Treat as binary file data packet
-                                int seqNum = ((data[0] & 0xFF) << 24) |
-                                        ((data[1] & 0xFF) << 16) |
-                                        ((data[2] & 0xFF) << 8) |
-                                        (data[3] & 0xFF);
-                                int dataLen = length - 4;
-                                byte[] fileData = new byte[dataLen];
-                                System.arraycopy(data, 4, fileData, 0, dataLen);
+                        // Try to convert to string first to check for protocol markers
+                        String message = null;
+                        try {
+                            message = new String(data, 0, length, "UTF-8");
+                        } catch (Exception e) {
+                            // If conversion fails and we're receiving a file, treat as binary file data
+                            if (receivingFile) {
+                                // Store the binary data as file content
+                                int seqNum = filePackets.size();
+                                byte[] fileData = new byte[length];
+                                System.arraycopy(data, 0, fileData, 0, length);
                                 filePackets.put(seqNum, fileData);
+                                continue;
+                            } else {
+                                // Skip if we can't convert and not receiving file
                                 continue;
                             }
                         }
 
-                        // Try to convert to string for text messages with UTF-8
-                        String message;
-                        try {
-                            message = new String(data, 0, length, "UTF-8");
-                        } catch (java.io.UnsupportedEncodingException uee) {
-                            appendChat("[Error] UTF-8 encoding not supported");
-                            continue;
-                        } catch (Exception e) {
-                            // If conversion fails, skip this packet
-                            continue;
-                        }
-
-                        if (!message.isEmpty()) {
-                            // Handle FILEINFO message - start of file transfer
-                            if (message.startsWith("FILEINFO|")) {
+                        if (message != null && !message.isEmpty()) {
+                            // Handle FILE|SEND_FROM_SERVER message - file from server/other clients
+                            if (message.startsWith("FILE|SEND_FROM_SERVER|")) {
+                                String[] parts = message.split("\\|", 5);
+                                if (parts.length >= 4) {
+                                    currentFileName = parts[2];
+                                    currentFileSize = Long.parseLong(parts[3]);
+                                    String senderUsername = parts.length >= 5 ? parts[4] : "Server";
+                                    receivingFile = true;
+                                    filePackets.clear();
+                                    appendChat("[System] " + senderUsername + " shared file: " + currentFileName + " (" + currentFileSize
+                                            + " bytes)");
+                                }
+                            }
+                            // Handle FILE|SEND message - start of file transfer from client
+                            else if (message.startsWith("FILE|SEND|")) {
                                 String[] parts = message.split("\\|");
-                                if (parts.length >= 3) {
-                                    currentFileName = parts[1];
-                                    currentFileSize = Long.parseLong(parts[2]);
+                                if (parts.length >= 4) {
+                                    currentFileName = parts[2];
+                                    currentFileSize = Long.parseLong(parts[3]);
                                     receivingFile = true;
                                     filePackets.clear();
                                     appendChat("[System] Receiving file: " + currentFileName + " (" + currentFileSize
                                             + " bytes)");
                                 }
                             }
-                            // Handle END message - end of file transfer
-                            else if (message.startsWith("END|")) {
+                            // Handle FILE|END message - end of file transfer
+                            else if (message.startsWith("FILE|END")) {
                                 if (receivingFile) {
                                     writeReceivedFile();
                                     receivingFile = false;
                                     filePackets.clear();
                                 }
                             }
-                            // Regular chat message
+                            // Regular chat message (only if not receiving file or message doesn't match file protocol)
                             else if (!receivingFile) {
                                 appendChat(message);
+                            } else {
+                                // During file transfer, treat unrecognized text as file data
+                                byte[] fileData = message.getBytes("UTF-8");
+                                int seqNum = filePackets.size();
+                                filePackets.put(seqNum, fileData);
                             }
                         }
                     } catch (java.net.SocketTimeoutException ste) {
@@ -955,47 +945,37 @@ public class UDPClientFrame extends JFrame {
                     }
 
                     synchronized (socket) {
-                        // Send file info
-                        String fileInfo = "FILEINFO|" + selectedFile.getName() + "|" + selectedFile.length();
-                        byte[] infoData = fileInfo.getBytes();
-                        DatagramPacket infoPacket = new DatagramPacket(infoData, infoData.length, serverAddr,
+                        // Send file command (similar to TCP: FILE|SEND|filename|size)
+                        String fileCommand = "FILE|SEND|" + selectedFile.getName() + "|" + selectedFile.length();
+                        byte[] commandData = fileCommand.getBytes("UTF-8");
+                        DatagramPacket commandPacket = new DatagramPacket(commandData, commandData.length, serverAddr,
                                 serverPort);
-                        socket.send(infoPacket);
+                        socket.send(commandPacket);
 
-                        // Send file data
+                        // Send file content with larger buffer (4096 bytes like TCP)
                         FileInputStream fis = new FileInputStream(selectedFile);
-                        byte[] buffer = new byte[512];
-                        int packetNum = 0;
+                        byte[] buffer = new byte[4096];
                         int read;
                         long totalSent = 0;
 
                         try {
                             while ((read = fis.read(buffer)) > 0) {
-                                byte[] packetData = new byte[read + 4];
-                                packetData[0] = (byte) ((packetNum >> 24) & 0xFF);
-                                packetData[1] = (byte) ((packetNum >> 16) & 0xFF);
-                                packetData[2] = (byte) ((packetNum >> 8) & 0xFF);
-                                packetData[3] = (byte) (packetNum & 0xFF);
-                                System.arraycopy(buffer, 0, packetData, 4, read);
-
-                                DatagramPacket packet = new DatagramPacket(packetData, packetData.length, serverAddr,
-                                        serverPort);
+                                DatagramPacket packet = new DatagramPacket(buffer, read, serverAddr, serverPort);
                                 socket.send(packet);
-
                                 totalSent += read;
-                                if (packetNum % 10 == 0) {
-                                    int progress = (int) ((totalSent * 100) / selectedFile.length());
-                                    updateProgress(progress);
-                                }
-                                packetNum++;
+                                int progress = (int) ((totalSent * 100) / selectedFile.length());
+                                updateProgress(progress);
                             }
                         } finally {
                             fis.close();
                         }
 
+                        // Small delay to ensure last packet is received before end marker
+                        Thread.sleep(100);
+                        
                         // Send end marker
-                        String endMsg = "END|";
-                        byte[] endData = endMsg.getBytes();
+                        String endMsg = "FILE|END";
+                        byte[] endData = endMsg.getBytes("UTF-8");
                         DatagramPacket endPacket = new DatagramPacket(endData, endData.length, serverAddr, serverPort);
                         socket.send(endPacket);
                     }

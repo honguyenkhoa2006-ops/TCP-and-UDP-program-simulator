@@ -1,11 +1,11 @@
 import java.awt.*;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
 import java.net.*;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.TitledBorder;
-import java.awt.event.FocusEvent;
-import java.awt.event.FocusListener;
 import javax.swing.border.EtchedBorder;
+import javax.swing.border.TitledBorder;
 
 public class Client extends JFrame {
 
@@ -16,25 +16,17 @@ public class Client extends JFrame {
 	private JTextArea areaResult;
 	private JButton btnSend;
 
-	/**
-	 * Launch the application.
-	 */
 	public static void main(String[] args) {
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				try {
-					Client frame = new Client();
-					frame.setVisible(true);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
+		EventQueue.invokeLater(() -> {
+			try {
+				Client frame = new Client();
+				frame.setVisible(true);
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
 		});
 	}
 
-	/**
-	 * Create the frame.
-	 */
 	public Client() {
 		setTitle("Client Nguyễn Trần Thanh Tâm - 52400315");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -85,41 +77,33 @@ public class Client extends JFrame {
 		btnSend.setBackground(new Color(0, 128, 255));
 		pnlBottom.add(btnSend, BorderLayout.EAST);
 
-		// --- XỬ LÝ SỰ KIỆN ---
 		btnSend.addActionListener(e -> sendRequest());
 		txtInput.addActionListener(e -> sendRequest());
 		this.getRootPane().setDefaultButton(btnSend);
-
 		SwingUtilities.invokeLater(() -> areaResult.requestFocusInWindow());
 	}
 
 	private void sendRequest() {
 	    try {
-	        // 1. Lấy dữ liệu thô từ các ô nhập
 	        String host = txtHost.getText().trim();
 	        String portStr = txtPort.getText().trim();
 	        String message = txtInput.getText().trim();
 
-	        // 2. Xử lý thông minh cho Host
-	        if (host.isEmpty() || host.equals("localhost") || host.contains("Nhập Host")) {
+	        if (host.isEmpty() || host.equals("localhost")) {
 	            host = "127.0.0.1";
 	        }
 
-	        // 3. Kiểm tra Port và Tin nhắn
-	        if (portStr.isEmpty() || portStr.contains("Nhập Port")) {
+	        if (portStr.isEmpty()) {
 	            JOptionPane.showMessageDialog(this, "Bạn chưa nhập Port!");
 	            return;
 	        }
 	        
-	        if (message.isEmpty() || message.contains("nhập văn bản")) {
-	            // Không làm gì cả nếu tin nhắn trống
+	        if (message.isEmpty()) {
 	            return;
 	        }
 
-	        // 4. Bắt đầu kết nối Socket
 	        int port = Integer.parseInt(portStr);
 	        
-	        // Dùng khối try-with-resources để tự động đóng socket
 	        try (DatagramSocket clientSocket = new DatagramSocket()) {
 	        	InetAddress IPAddress = InetAddress.getLoopbackAddress();
 	            clientSocket.setSoTimeout(3000); // Chờ server trong 3 giây
@@ -135,15 +119,9 @@ public class Client extends JFrame {
 	            clientSocket.receive(receivePacket);
 
 	            String result = new String(receivePacket.getData(), 0, receivePacket.getLength(), "UTF-8");
-	            
-	            // Hiển thị kết quả lên JTextArea
 	            areaResult.append("SEND: " + message + "\n");
 	            areaResult.append("RECV: " + result + "\n\n");
-	            
-	            // Cuộn xuống dòng mới nhất
 	            areaResult.setCaretPosition(areaResult.getDocument().getLength());
-	            
-	            // Xóa ô nhập tin nhắn để sẵn sàng cho câu tiếp theo
 	            txtInput.setText(""); 
 	            txtInput.requestFocus();
 	            
@@ -160,7 +138,6 @@ public class Client extends JFrame {
 	    }
 	}
 
-	// --- LỚP CON XỬ LÝ PLACEHOLDER (Trình Design có thể hiểu được) ---
 	class PlaceholderTextField extends JTextField {
 		public PlaceholderTextField(String placeholder, int columns) {
 			super(placeholder, columns);
