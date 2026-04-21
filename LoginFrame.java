@@ -1,4 +1,4 @@
-﻿import java.awt.EventQueue;
+import java.awt.EventQueue;
 import java.io.*;
 import javax.swing.*;
 import java.util.HashMap;
@@ -19,6 +19,9 @@ public class LoginFrame extends JFrame {
     public static void main(String[] args) {
 		EventQueue.invokeLater(() -> {
 			try {
+				// Verify and setup data files at startup
+				FileSetupUtility.verifyAndSetupFiles();
+				
 				LoginFrame frame = new LoginFrame();
 				frame.setVisible(true);
 			} catch (Exception e) {
@@ -29,7 +32,7 @@ public class LoginFrame extends JFrame {
 
     public LoginFrame() {
         setTitle("Login");
-        setSize(350, 250);
+        setSize(350, 200);
         setLayout(null);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
 
@@ -39,6 +42,7 @@ public class LoginFrame extends JFrame {
 
         txtUser = new JTextField();
         txtUser.setBounds(120, 10, 120, 25);
+        txtUser.setFont(new java.awt.Font("Times New Roman", java.awt.Font.PLAIN, 12));
         add(txtUser);
 
         JLabel lblPass = new JLabel("Password:");
@@ -47,6 +51,7 @@ public class LoginFrame extends JFrame {
 
         txtPass = new JPasswordField();
         txtPass.setBounds(120, 40, 120, 25);
+        txtPass.setFont(new java.awt.Font("Times New Roman", java.awt.Font.PLAIN, 12));
         add(txtPass);
 
         JCheckBox chkShowPassword = new JCheckBox("Show");
@@ -69,15 +74,15 @@ public class LoginFrame extends JFrame {
         add(btnRegister);
 
         JButton btnChangePassword = new JButton("Change Password");
-        btnChangePassword.setBounds(250, 70, 80, 25);
+        btnChangePassword.setBounds(30, 100, 290, 25);
         add(btnChangePassword);
 
         JButton btnLogin = new JButton("Login");
-        btnLogin.setBounds(30, 110, 80, 30);
+        btnLogin.setBounds(250, 70, 70, 25);
         add(btnLogin);
 
-        JButton btnBack = new JButton("Back");
-        btnBack.setBounds(120, 110, 80, 30);
+        JButton btnBack = new JButton("< Back");
+        btnBack.setBounds(250, 10, 80, 25);
         add(btnBack);
 
         
@@ -93,7 +98,7 @@ public class LoginFrame extends JFrame {
 
                 this.dispose();
             } else {
-                JOptionPane.showMessageDialog(this, "Sai tài khoản!");
+                JOptionPane.showMessageDialog(this, "Invalid credentials!");
             }
         });
         btnBack.addActionListener(e -> {
@@ -141,7 +146,7 @@ public class LoginFrame extends JFrame {
         txtNewPass.setBounds(110, 70, 150, 25);
         dialog.add(txtNewPass);
         
-        JButton btnChange = new JButton("Change");
+        JButton btnChange = new JButton("✓ Confirm");
         btnChange.setBounds(60, 110, 80, 30);
         btnChange.addActionListener(e -> {
             String username = txtUsername.getText().trim();
@@ -162,7 +167,7 @@ public class LoginFrame extends JFrame {
         });
         dialog.add(btnChange);
         
-        JButton btnClose = new JButton("Close");
+        JButton btnClose = new JButton("[X] Close");
         btnClose.setBounds(160, 110, 80, 30);
         btnClose.addActionListener(e -> dialog.dispose());
         dialog.add(btnClose);
@@ -193,28 +198,78 @@ public class LoginFrame extends JFrame {
     }
     
     private static void loadUserCredentialsFromFile(String filename) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(",");
-                if (parts.length >= 2) {
-                    String username = parts[0].trim();
-                    String password = parts[1].trim();
-                    userCredentials.put(username, password);
-                }
+        try {
+            // Ensure files exist with default content before loading
+            FileSetupUtility.verifyAndSetupFiles();
+            
+            // Get the actual file path - first check current directory, then jar directory
+            File file = new File(filename);
+            if (!file.exists()) {
+                // Try to find it relative to the jar file location
+                String jarPath = LoginFrame.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+                file = new File(new File(jarPath).getParent(), filename);
             }
-        } catch (IOException ex) {
+            
+            if (!file.exists()) {
+                System.err.println("Warning: " + filename + " not found. Credentials may not load. Looked in:");
+                System.err.println("  - " + new File(filename).getAbsolutePath());
+                System.err.println("  - " + new File(new File(System.getProperty("java.class.path")).getParent(), filename).getAbsolutePath());
+                System.err.println("  - Current working dir: " + System.getProperty("user.dir"));
+                return;
+            }
+            
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                String line;
+                int lineCount = 0;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.trim().isEmpty()) {
+                        String[] parts = line.split(",");
+                        if (parts.length >= 2) {
+                            String username = parts[0].trim();
+                            String password = parts[1].trim();
+                            userCredentials.put(username, password);
+                            lineCount++;
+                        }
+                    }
+                }
+                System.out.println("✓ Loaded " + lineCount + " users from " + file.getAbsolutePath());
+            }
+        } catch (Exception ex) {
+            System.err.println("Error loading credentials: " + ex.getMessage());
             ex.printStackTrace();
         }
     }
     
     private static void writeUserCredentialsToFile(String filename) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename))) {
-            for (String username : userCredentials.keySet()) {
-                writer.write(username + "," + userCredentials.get(username));
-                writer.newLine();
+        try {
+            // Get the actual file path - use current directory
+            File file = new File(filename);
+            
+            // If file doesn't exist in current directory, try jar directory
+            if (!file.isAbsolute() && !file.exists()) {
+                try {
+                    String jarPath = LoginFrame.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+                    file = new File(new File(jarPath).getParent(), filename);
+                } catch (Exception e) {
+                    // Fall back to current directory
+                    file = new File(filename);
+                }
             }
+            
+            // Create file if it doesn't exist
+            if (!file.exists()) {
+                file.createNewFile();
+            }
+            
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                for (String username : userCredentials.keySet()) {
+                    writer.write(username + "," + userCredentials.get(username));
+                    writer.newLine();
+                }
+            }
+            System.out.println("Credentials saved to " + file.getAbsolutePath());
         } catch (IOException ex) {
+            System.err.println("Error writing credentials: " + ex.getMessage());
             ex.printStackTrace();
         }
     }    

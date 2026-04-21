@@ -1,9 +1,9 @@
-﻿import java.awt.*;
+import java.awt.*;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
 public class MainMenu extends JFrame {
-    
+
     public static void setupLookAndFeel() {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -11,10 +11,13 @@ public class MainMenu extends JFrame {
             e.printStackTrace();
         }
     }
-    
+
     public static void main(String[] args) {
         EventQueue.invokeLater(() -> {
             try {
+                // Verify and setup data files at startup
+                FileSetupUtility.verifyAndSetupFiles();
+
                 setupLookAndFeel();
                 MainMenu frame = new MainMenu();
                 frame.setVisible(true);
@@ -36,15 +39,6 @@ public class MainMenu extends JFrame {
         contentPane.setBackground(Color.WHITE);
         setContentPane(contentPane);
 
-        // Top panel: Title
-        JPanel titlePanel = new JPanel();
-        titlePanel.setBackground(Color.WHITE);
-        JLabel lblTitle = new JLabel("Protocol Communication Project");
-        lblTitle.setFont(new Font("Times New Roman", Font.BOLD, 24));
-        lblTitle.setForeground(new Color(5, 150, 215));
-        titlePanel.add(lblTitle);
-        contentPane.add(titlePanel, BorderLayout.NORTH);
-
         // Center panel: Team info
         JPanel centerPanel = new JPanel(new BorderLayout());
         centerPanel.setBackground(Color.WHITE);
@@ -52,15 +46,14 @@ public class MainMenu extends JFrame {
         JPanel infoPanel = new JPanel(new GridLayout(2, 1, 10, 15));
         infoPanel.setBackground(Color.WHITE);
         infoPanel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
-            "Team Members",
-            javax.swing.border.TitledBorder.LEFT,
-            javax.swing.border.TitledBorder.TOP,
-            new Font("Times New Roman", Font.BOLD, 14),
-            Color.BLACK
-        ));
+                BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
+                "Team Members",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Times New Roman", Font.BOLD, 14),
+                Color.BLACK));
 
-        JLabel lblMember1 = new JLabel("Hồ Nguyên Khoa          MSSV: 52400279");
+        JLabel lblMember1 = new JLabel("Hồ Nguyên Khoa                 MSSV: 52400279");
         lblMember1.setFont(new Font("Times New Roman", Font.PLAIN, 14));
         lblMember1.setForeground(Color.BLACK);
 
@@ -76,70 +69,86 @@ public class MainMenu extends JFrame {
         JPanel selectionPanel = new JPanel(new BorderLayout(10, 10));
         selectionPanel.setBackground(Color.WHITE);
         selectionPanel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
-            "Select Mode",
-            javax.swing.border.TitledBorder.LEFT,
-            javax.swing.border.TitledBorder.TOP,
-            new Font("Times New Roman", Font.BOLD, 14),
-            Color.BLACK
-        ));
+                BorderFactory.createLineBorder(new Color(200, 200, 200), 1),
+                "Select Mode",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Times New Roman", Font.BOLD, 14),
+                Color.BLACK));
 
         JLabel lblSelect = new JLabel("Protocol");
         lblSelect.setFont(new Font("Times New Roman", Font.BOLD, 13));
 
-        String[] options = { "-- Select --", "TCP Client", "TCP Server", "UDP Client", "UDP Server" };
-        JComboBox<String> comboBox = new JComboBox<>(options);
-        comboBox.setFont(new Font("Times New Roman", Font.PLAIN, 13));
-        comboBox.setPreferredSize(new Dimension(200, 35));
+        JPanel buttonPanel = new JPanel(new GridLayout(2, 2, 10, 10));
+        buttonPanel.setBackground(Color.WHITE);
 
-        JButton btnSelect = new JButton("Open");
-        btnSelect.setFont(new Font("Times New Roman", Font.BOLD, 12));
-        btnSelect.setPreferredSize(new Dimension(100, 35));
-        btnSelect.setFocusPainted(false);
-        btnSelect.addActionListener(e -> {
-            String selected = (String) comboBox.getSelectedItem();
-            if (selected.equals("TCP Client")) {
-                try {
-                    new LoginFrame().setVisible(true);
-                    this.dispose();
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Error opening TCP Client: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            } else if (selected.equals("TCP Server")) {
-                try {
-                    TCPServerFrame.setupLookAndFeel();
-                    new TCPServerFrame().setVisible(true);
-                    this.dispose();
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Error opening TCP Server: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            } else if (selected.equals("UDP Client")) {
-                try {
-                    new LoginFrameUDP().setVisible(true);
-                    this.dispose();
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Error opening UDP Client: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            } else if (selected.equals("UDP Server")) {
-                try {
-                    UDPServerFrame.setupLookAndFeel();
-                    new UDPServerFrame().setVisible(true);
-                    this.dispose();
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Error opening UDP Server: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Please select an option!", "Warning", JOptionPane.WARNING_MESSAGE);
+        // TCP Client Button
+        JButton btnTcpClient = new JButton("TCP client");
+        btnTcpClient.setFont(new Font("Times New Roman", Font.BOLD, 12));
+        btnTcpClient.setPreferredSize(new Dimension(120, 50));
+        btnTcpClient.setFocusPainted(false);
+        btnTcpClient.addActionListener(e -> {
+            try {
+                new LoginFrame().setVisible(true);
+                this.dispose();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error opening TCP Client: " + ex.getMessage(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
             }
         });
+        buttonPanel.add(btnTcpClient);
 
-        JPanel comboPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
-        comboPanel.setBackground(Color.WHITE);
-        comboPanel.add(lblSelect);
-        comboPanel.add(comboBox);
-        comboPanel.add(btnSelect);
+        // TCP Server Button
+        JButton btnTcpServer = new JButton("TCP server");
+        btnTcpServer.setFont(new Font("Times New Roman", Font.BOLD, 12));
+        btnTcpServer.setPreferredSize(new Dimension(120, 50));
+        btnTcpServer.setFocusPainted(false);
+        btnTcpServer.addActionListener(e -> {
+            try {
+                TCPServerFrame.setupLookAndFeel();
+                new TCPServerFrame().setVisible(true);
+                this.dispose();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error opening TCP Server: " + ex.getMessage(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        buttonPanel.add(btnTcpServer);
 
-        selectionPanel.add(comboPanel, BorderLayout.CENTER);
+        // UDP Client Button
+        JButton btnUdpClient = new JButton("UDP client");
+        btnUdpClient.setFont(new Font("Times New Roman", Font.BOLD, 12));
+        btnUdpClient.setPreferredSize(new Dimension(120, 50));
+        btnUdpClient.setFocusPainted(false);
+        btnUdpClient.addActionListener(e -> {
+            try {
+                new LoginFrameUDP().setVisible(true);
+                this.dispose();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error opening UDP Client: " + ex.getMessage(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        buttonPanel.add(btnUdpClient);
+
+        // UDP Server Button
+        JButton btnUdpServer = new JButton("UDP server");
+        btnUdpServer.setFont(new Font("Times New Roman", Font.BOLD, 12));
+        btnUdpServer.setPreferredSize(new Dimension(120, 50));
+        btnUdpServer.setFocusPainted(false);
+        btnUdpServer.addActionListener(e -> {
+            try {
+                UDPServerFrame.setupLookAndFeel();
+                new UDPServerFrame().setVisible(true);
+                this.dispose();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error opening UDP Server: " + ex.getMessage(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        buttonPanel.add(btnUdpServer);
+
+        selectionPanel.add(buttonPanel, BorderLayout.CENTER);
         centerPanel.add(selectionPanel, BorderLayout.CENTER);
 
         contentPane.add(centerPanel, BorderLayout.CENTER);
@@ -148,7 +157,7 @@ public class MainMenu extends JFrame {
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         bottomPanel.setBackground(Color.WHITE);
 
-        JButton btnExit = new JButton("Exit");
+        JButton btnExit = new JButton("[X] Exit");
         btnExit.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnExit.setPreferredSize(new Dimension(100, 30));
         btnExit.addActionListener(e -> System.exit(0));
@@ -158,4 +167,3 @@ public class MainMenu extends JFrame {
         contentPane.add(bottomPanel, BorderLayout.SOUTH);
     }
 }
-

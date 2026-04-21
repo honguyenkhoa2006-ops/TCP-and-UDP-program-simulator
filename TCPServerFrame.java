@@ -1,13 +1,11 @@
-﻿import java.awt.*;
+import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
@@ -18,7 +16,7 @@ public class TCPServerFrame extends JFrame {
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("Failed to set look and feel: " + e.getMessage());
         }
     }
 
@@ -29,17 +27,17 @@ public class TCPServerFrame extends JFrame {
                 TCPServerFrame frame = new TCPServerFrame();
                 frame.setVisible(true);
             } catch (Exception e) {
-                e.printStackTrace();
+                System.err.println("Error: " + e.getMessage());
             }
         });
     }
 
     public TCPServerFrame() {
         setTitle("TCP Server Manager - Chat & File Transfer");
-        setBounds(100, 100, 1000, 700);
+        setBounds(100, 100, 1000, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(true);
-        setMinimumSize(new Dimension(900, 600));
+        setMinimumSize(new Dimension(850, 500));
 
         JPanel contentPane = new JPanel(new BorderLayout());
         setContentPane(contentPane);
@@ -52,7 +50,7 @@ public class TCPServerFrame extends JFrame {
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         bottomPanel.setBackground(Color.WHITE);
 
-        JButton btnBack = new JButton("Back");
+        JButton btnBack = new JButton("< Back");
         btnBack.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnBack.setPreferredSize(new Dimension(100, 30));
         btnBack.addActionListener(e -> {
@@ -72,19 +70,19 @@ public class TCPServerFrame extends JFrame {
 
 // ==================== TCP SERVER COMBINED PANEL ====================
 class TCPServerCombinedPanel extends JPanel {
-    private JTextField txtPort;
+    private final JTextField txtPort;
 
-    private JTextField txtSelectedFile;
-    private JTextField inputMessage;
-    private JTextArea chattingHistory;
-    private JTextArea transferHistory;
-    private JTextArea availableFilesArea;
-    private JLabel lblStatus;
-    private JButton btnStart;
-    private JButton btnStop;
-    private JButton btnSend;
-    private JButton btnSendFile;
-    private JProgressBar progressBar;
+    private final JTextField txtSelectedFile;
+    private final JTextField inputMessage;
+    private final JTextArea chattingHistory;
+    private final JTextArea transferHistory;
+    private final JTextArea availableFilesArea;
+    private final JLabel lblStatus;
+    private final JButton btnStart;
+    private final JButton btnStop;
+    private final JButton btnSend;
+    private final JButton btnSendFile;
+    private final JProgressBar progressBar;
 
     private volatile boolean serverRunning = false;
     private ServerSocket combinedSocket;
@@ -102,19 +100,19 @@ class TCPServerCombinedPanel extends JPanel {
         topPanel.setBackground(Color.WHITE);
 
         JLabel lblPort = new JLabel("Base Port:");
-        lblPort.setFont(new Font("Times New Roman", Font.BOLD, 14));
+        lblPort.setFont(new Font("Times New Roman", Font.BOLD, 12));
         topPanel.add(lblPort);
 
-        txtPort = new JTextField("", 8);
-        txtPort.setFont(new Font("Times New Roman", Font.PLAIN, 14));
+        txtPort = new JTextField("", 6);
+        txtPort.setFont(new Font("Times New Roman", Font.PLAIN, 12));
         topPanel.add(txtPort);
 
-        btnStart = new JButton("Start");
+        btnStart = new JButton(">> Start");
         btnStart.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnStart.addActionListener(e -> startAllServers());
         topPanel.add(btnStart);
 
-        btnStop = new JButton("Stop");
+        btnStop = new JButton("[X] Stop");
         btnStop.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnStop.setEnabled(false);
         btnStop.addActionListener(e -> stopAllServers());
@@ -129,7 +127,9 @@ class TCPServerCombinedPanel extends JPanel {
 
         // Center: Split pane with chat and file transfer
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(500);
+        splitPane.setDividerLocation(480);
+        splitPane.setResizeWeight(0.5);
+        splitPane.setContinuousLayout(true);
 
         // Chat section
         JPanel chatPanel = new JPanel(new BorderLayout(5, 5));
@@ -175,7 +175,7 @@ class TCPServerCombinedPanel extends JPanel {
             }
         });
 
-        btnSend = new JButton("📨 Send");
+        btnSend = new JButton("> Send");
         btnSend.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnSend.setPreferredSize(new Dimension(100, 30));
         btnSend.addActionListener(e -> sendBroadcast());
@@ -210,6 +210,8 @@ class TCPServerCombinedPanel extends JPanel {
         // Split panel for transfer history and available files
         JSplitPane fileSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         fileSplitPane.setDividerLocation(150);
+        fileSplitPane.setResizeWeight(0.5);
+        fileSplitPane.setContinuousLayout(true);
 
         transferHistory = new JTextArea();
         transferHistory.setEditable(false);
@@ -231,31 +233,43 @@ class TCPServerCombinedPanel extends JPanel {
         JPanel fileControlPanel = new JPanel(new BorderLayout(10, 10));
         fileControlPanel.setBackground(Color.WHITE);
 
-        // File selection panel
-        JPanel fileSelectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        // File selection main panel
+        JPanel fileSelectPanel = new JPanel(new BorderLayout(0, 8));
         fileSelectPanel.setBackground(Color.WHITE);
+
+        // File selection panel - first row (Selected file info)
+        JPanel fileNamePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        fileNamePanel.setBackground(Color.WHITE);
 
         JLabel lblFileSelect = new JLabel("Selected:");
         lblFileSelect.setFont(new Font("Times New Roman", Font.BOLD, 12));
-        fileSelectPanel.add(lblFileSelect);
+        fileNamePanel.add(lblFileSelect);
 
         txtSelectedFile = new JTextField(25);
         txtSelectedFile.setFont(new Font("Times New Roman", Font.PLAIN, 12));
         txtSelectedFile.setEditable(false);
         txtSelectedFile.setBackground(Color.WHITE);
-        fileSelectPanel.add(txtSelectedFile);
+        fileNamePanel.add(txtSelectedFile);
 
-        JButton btnSelectFile = new JButton("📁 Select File");
+        JButton btnSelectFile = new JButton("[ ] Select");
         btnSelectFile.setFont(new Font("Times New Roman", Font.BOLD, 11));
         btnSelectFile.setPreferredSize(new Dimension(120, 30));
         btnSelectFile.addActionListener(e -> selectSingleFile());
-        fileSelectPanel.add(btnSelectFile);
+        fileNamePanel.add(btnSelectFile);
 
-        btnSendFile = new JButton("📤 Send to All");
+        fileSelectPanel.add(fileNamePanel, BorderLayout.NORTH);
+
+        // File selection panel - second row (Send button)
+        JPanel sendButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
+        sendButtonPanel.setBackground(Color.WHITE);
+
+        btnSendFile = new JButton(">> Send All");
         btnSendFile.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnSendFile.setPreferredSize(new Dimension(130, 30));
         btnSendFile.addActionListener(e -> sendFileToAllClients());
-        fileSelectPanel.add(btnSendFile);
+        sendButtonPanel.add(btnSendFile);
+
+        fileSelectPanel.add(sendButtonPanel, BorderLayout.SOUTH);
 
         fileControlPanel.add(fileSelectPanel, BorderLayout.NORTH);
 
@@ -284,8 +298,12 @@ class TCPServerCombinedPanel extends JPanel {
         int port;
         try {
             port = Integer.parseInt(txtPort.getText().trim());
+            if (port < 1 || port > 65535) {
+                JOptionPane.showMessageDialog(this, "Port must be in range 1-65535!", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Port không hợp lệ!", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Port must be an integer!", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -358,9 +376,9 @@ class TCPServerCombinedPanel extends JPanel {
         emojiBar.setBorder(BorderFactory.createMatteBorder(1, 0, 1, 0, Color.LIGHT_GRAY));
         
         // Main emoji picker button
-        JButton emojiPickerBtn = new JButton("▼");
-        emojiPickerBtn.setFont(new Font("Arial", Font.BOLD, 14));
-        emojiPickerBtn.setPreferredSize(new Dimension(40, 35));
+        JButton emojiPickerBtn = new JButton("Emoji");
+        emojiPickerBtn.setFont(new Font("Times New Roman", Font.BOLD, 11));
+        emojiPickerBtn.setPreferredSize(new Dimension(80, 25));
         emojiPickerBtn.setBackground(Color.WHITE);
         emojiPickerBtn.setForeground(Color.BLACK);
         emojiPickerBtn.setFocusPainted(false);
@@ -378,7 +396,7 @@ class TCPServerCombinedPanel extends JPanel {
         
         // Comprehensive emoji list - using symbols for Java 8 compatibility
         String[] emojis = {
-            "☺", "❤", "✓", "✔","✉", "✍", "☑", "☒"
+            "☺", "❤", "✓", "✔", "✉", "✍", "☑", "☒", "👍", "😊", "💬", "⭐"
         };
         
         Font emojiFont = getEmojiFont(16);
@@ -464,17 +482,6 @@ class TCPServerCombinedPanel extends JPanel {
 
 
 
-    private void browseFolder() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        int result = fileChooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-            appendHistory("📂 File folder selected: " + selectedFile.getAbsolutePath());
-            viewAvailableFiles();
-        }
-    }
-
     private void selectSingleFile() {
         String folderPath = "";
         JFileChooser fileChooser = new JFileChooser();
@@ -486,39 +493,8 @@ class TCPServerCombinedPanel extends JPanel {
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
             txtSelectedFile.setText(selectedFile.getAbsolutePath());
-            appendHistory("✓ Selected file: " + selectedFile.getName() + " (" + selectedFile.length() + " bytes)");
+            appendHistory("Selected file: " + selectedFile.getName() + " (" + selectedFile.length() + " bytes)");
         }
-    }
-
-    private void viewAvailableFiles() {
-        String path = ".";
-        File directory = new File(path);
-        if (!directory.exists() || !directory.isDirectory()) {
-            availableFilesArea.setText("❌ Invalid directory: " + path);
-            return;
-        }
-
-        File[] files = directory.listFiles();
-        if (files == null || files.length == 0) {
-            availableFilesArea.setText("📭 No files found in current directory");
-            return;
-        }
-
-        StringBuilder fileList = new StringBuilder();
-        fileList.append("📁 Available Files\n");
-        for (int i = 0; i < 80; i++) fileList.append("=");
-        fileList.append("\n");
-        fileList.append("(Use 'Select File' button to choose a file)\n\n");
-        
-        for (File file : files) {
-            if (file.isFile()) {
-                long sizeKB = file.length() / 1024;
-                fileList.append(String.format("📄 %-48s %8d KB\n", file.getName(), sizeKB));
-            }
-        }
-
-        availableFilesArea.setText(fileList.toString());
-        availableFilesArea.setCaretPosition(0);
     }
 
     private void sendFileToAllClients() {
@@ -634,7 +610,17 @@ class TCPServerCombinedPanel extends JPanel {
             try {
                 username = "User_" + clientId;
                 chatClients.put(clientId, this);
-                appendChat("✅ " + username + " connected.");
+                
+                // Wait for login command from client (first message)
+                String firstMessage = dis.readUTF();
+                if (firstMessage != null && firstMessage.startsWith("CMD|LOGIN|")) {
+                    String[] parts = firstMessage.split("\\|");
+                    if (parts.length >= 3) {
+                        username = parts[2].trim();
+                    }
+                }
+                
+                appendChat(username + " connected.");
                 chatBroadcast("[System] " + username + " joined the chat.", clientId);
 
                 // Handle chat and file messages
@@ -652,6 +638,13 @@ class TCPServerCombinedPanel extends JPanel {
                         // Handle FILE commands
                         if (message.startsWith("FILE|")) {
                             processFileCommand(message);
+                            continue;
+                        }
+                        
+                        // Handle GAME messages - broadcast to all clients
+                        if (message.startsWith("GAME|")) {
+                            appendChat("[Game] " + username + ": " + message);
+                            chatBroadcast(message, clientId);
                             continue;
                         }
                         
@@ -794,10 +787,6 @@ class TCPServerCombinedPanel extends JPanel {
             }
         }
 
-        private void handleChatProtocol(String firstMsg) throws IOException {
-            // Deprecated - no longer used, authentication removed
-        }
-
         private void processFileCommand(String command) throws IOException {
             if (command == null || !command.startsWith("FILE|")) {
                 return;
@@ -847,7 +836,9 @@ class TCPServerCombinedPanel extends JPanel {
                     updateProgress(progress);
                 }
                 fos.flush();
+                String filePath = file.getAbsolutePath();
                 appendHistory("Received file: " + file.getName() + " (Size: " + fileSize + " bytes)");
+                appendHistory("Saved to: " + filePath);
                 
                 synchronized (dos) {
                     dos.writeUTF("FILE|RECEIVED");

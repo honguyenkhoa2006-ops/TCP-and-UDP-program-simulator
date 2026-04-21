@@ -1,12 +1,10 @@
-﻿import java.awt.*;
+import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
 import java.util.concurrent.ConcurrentHashMap;
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 
@@ -35,10 +33,10 @@ public class UDPServerFrame extends JFrame {
 
     public UDPServerFrame() {
         setTitle("UDP Server Manager - Chat & File Transfer");
-        setBounds(100, 100, 1000, 700);
+        setBounds(100, 100, 1200, 700);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setResizable(true);
-        setMinimumSize(new Dimension(900, 600));
+        setMinimumSize(new Dimension(950, 600));
 
         JPanel contentPane = new JPanel(new BorderLayout());
         setContentPane(contentPane);
@@ -51,7 +49,7 @@ public class UDPServerFrame extends JFrame {
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         bottomPanel.setBackground(Color.WHITE);
 
-        JButton btnBack = new JButton("Back");
+        JButton btnBack = new JButton("< Back");
         btnBack.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnBack.setPreferredSize(new Dimension(100, 30));
         btnBack.addActionListener(e -> {
@@ -96,17 +94,20 @@ class UDPServerCombinedPanel extends JPanel {
         InetAddress address;
         int port;
         String username;
+        String room; // Room identifier for grouping clients
 
-        ClientInfo(InetAddress address, int port, String username) {
+        ClientInfo(InetAddress address, int port, String username, String room) {
             this.address = address;
             this.port = port;
             this.username = username;
+            this.room = room != null && !room.isEmpty() ? room : "default";
         }
     }
 
     private class FileReceiveState {
         FileOutputStream fos;
         long totalReceived = 0;
+        String filePath;
 
         FileReceiveState(String fileName, long fileSize, String serverPath) throws IOException {
             File targetFile;
@@ -115,7 +116,8 @@ class UDPServerCombinedPanel extends JPanel {
             } else {
                 targetFile = new File("received_" + fileName);
             }
-            
+
+            this.filePath = targetFile.getAbsolutePath();
             this.fos = new FileOutputStream(targetFile);
         }
 
@@ -128,10 +130,15 @@ class UDPServerCombinedPanel extends JPanel {
 
         void close() {
             try {
-                if (fos != null) fos.close();
+                if (fos != null)
+                    fos.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
+
+        String getFilePath() {
+            return filePath;
         }
     }
 
@@ -145,19 +152,19 @@ class UDPServerCombinedPanel extends JPanel {
         topPanel.setBackground(Color.WHITE);
 
         JLabel lblPort = new JLabel("Base Port:");
-        lblPort.setFont(new Font("Times New Roman", Font.BOLD, 14));
+        lblPort.setFont(new Font("Times New Roman", Font.BOLD, 12));
         topPanel.add(lblPort);
 
-        txtPort = new JTextField("", 8);
-        txtPort.setFont(new Font("Times New Roman", Font.PLAIN, 14));
+        txtPort = new JTextField("", 6);
+        txtPort.setFont(new Font("Times New Roman", Font.PLAIN, 12));
         topPanel.add(txtPort);
 
-        btnStart = new JButton("Start");
+        btnStart = new JButton(">> Start");
         btnStart.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnStart.addActionListener(e -> startAllServers());
         topPanel.add(btnStart);
 
-        btnStop = new JButton("Stop");
+        btnStop = new JButton("[X] Stop");
         btnStop.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnStop.setEnabled(false);
         btnStop.addActionListener(e -> stopAllServers());
@@ -172,19 +179,20 @@ class UDPServerCombinedPanel extends JPanel {
 
         // Center: Split pane with chat and file transfer
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(500);
+        splitPane.setDividerLocation(480);
+        splitPane.setResizeWeight(0.5);
+        splitPane.setContinuousLayout(true);
 
         // Chat section
         JPanel chatPanel = new JPanel(new BorderLayout(5, 5));
         chatPanel.setBackground(Color.WHITE);
         chatPanel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(Color.BLACK),
-            "Chat (Port: base, shared with file transfer)",
-            javax.swing.border.TitledBorder.LEFT,
-            javax.swing.border.TitledBorder.TOP,
-            new Font("Times New Roman", Font.BOLD, 14),
-            Color.BLACK
-        ));
+                BorderFactory.createLineBorder(Color.BLACK),
+                "Chat (Port: base, shared with file transfer)",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Times New Roman", Font.BOLD, 14),
+                Color.BLACK));
 
         chattingHistory = new JTextArea();
         chattingHistory.setFont(new Font("Times New Roman", Font.PLAIN, 14));
@@ -201,7 +209,7 @@ class UDPServerCombinedPanel extends JPanel {
         // Chat input
         // Create emoji bar
         JPanel emojiBar = createEmojiBar();
-        
+
         JPanel chatInputPanel = new JPanel(new BorderLayout(10, 10));
         chatInputPanel.setBackground(Color.WHITE);
 
@@ -218,7 +226,7 @@ class UDPServerCombinedPanel extends JPanel {
             }
         });
 
-        btnSend = new JButton("📨 Send");
+        btnSend = new JButton("> Send");
         btnSend.setFont(new Font("Times New Roman", Font.BOLD, 12));
         btnSend.setPreferredSize(new Dimension(100, 30));
         btnSend.addActionListener(e -> sendBroadcast());
@@ -229,7 +237,7 @@ class UDPServerCombinedPanel extends JPanel {
 
         chatInputPanel.add(inputMessage, BorderLayout.CENTER);
         chatInputPanel.add(buttonPanel, BorderLayout.EAST);
-        
+
         JPanel chatBottomPanel = new JPanel(new BorderLayout(10, 10));
         chatBottomPanel.setBackground(Color.WHITE);
         chatBottomPanel.add(emojiBar, BorderLayout.NORTH);
@@ -242,17 +250,18 @@ class UDPServerCombinedPanel extends JPanel {
         JPanel filePanel = new JPanel(new BorderLayout(5, 5));
         filePanel.setBackground(Color.WHITE);
         filePanel.setBorder(BorderFactory.createTitledBorder(
-            BorderFactory.createLineBorder(Color.BLACK),
-            "File Transfer (Port: base, shared)",
-            javax.swing.border.TitledBorder.LEFT,
-            javax.swing.border.TitledBorder.TOP,
-            new Font("Times New Roman", Font.BOLD, 14),
-            Color.BLACK
-        ));
+                BorderFactory.createLineBorder(Color.BLACK),
+                "File Transfer (Port: base, shared)",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Times New Roman", Font.BOLD, 14),
+                Color.BLACK));
 
         // Split panel for transfer history and available files
         JSplitPane fileSplitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         fileSplitPane.setDividerLocation(150);
+        fileSplitPane.setResizeWeight(0.5);
+        fileSplitPane.setContinuousLayout(true);
 
         transferHistory = new JTextArea();
         transferHistory.setEditable(false);
@@ -267,7 +276,7 @@ class UDPServerCombinedPanel extends JPanel {
         availableFilesArea.setBackground(Color.WHITE);
         availableFilesArea.setForeground(Color.BLACK);
         fileSplitPane.setBottomComponent(new JScrollPane(availableFilesArea));
-        
+
         filePanel.add(fileSplitPane, BorderLayout.CENTER);
 
         // File controls
@@ -288,13 +297,13 @@ class UDPServerCombinedPanel extends JPanel {
         txtSelectedFile.setBackground(Color.WHITE);
         fileSelectionPanel.add(txtSelectedFile);
 
-        JButton btnSelectFile = new JButton("📁 Select File");
+        JButton btnSelectFile = new JButton("[ ] Select");
         btnSelectFile.setFont(new Font("Times New Roman", Font.BOLD, 11));
         btnSelectFile.setPreferredSize(new Dimension(120, 30));
         btnSelectFile.addActionListener(e -> selectSingleFile());
         fileSelectionPanel.add(btnSelectFile);
 
-        btnSendFile = new JButton("📤 Send to All");
+        btnSendFile = new JButton(">> Send All");
         btnSendFile.setFont(new Font("Times New Roman", Font.PLAIN, 12));
         btnSendFile.setPreferredSize(new Dimension(130, 30));
         btnSendFile.addActionListener(e -> sendFileToAllClients());
@@ -319,7 +328,43 @@ class UDPServerCombinedPanel extends JPanel {
         filePanel.add(fileControlPanel, BorderLayout.SOUTH);
 
         splitPane.setRightComponent(filePanel);
-        add(splitPane, BorderLayout.CENTER);
+
+        // Create tabbed pane for different features
+        JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
+        tabbedPane.setBackground(Color.WHITE);
+
+        // Tab 1: Chat & File Transfer
+        tabbedPane.addTab("Chat & File Transfer", splitPane);
+
+        // Tab 2: Tic-Tac-Toe Game (Server monitoring)
+        JPanel gameMonitorPanel = new JPanel(new BorderLayout(10, 10));
+        gameMonitorPanel.setBackground(Color.WHITE);
+        gameMonitorPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+
+        JLabel gameInfoLabel = new JLabel("Game Status: Ready to accept game connections");
+        gameInfoLabel.setFont(new Font("Times New Roman", Font.BOLD, 14));
+        gameMonitorPanel.add(gameInfoLabel, BorderLayout.NORTH);
+
+        JTextArea gameStatusArea = new JTextArea();
+        gameStatusArea.setFont(new Font("Courier New", Font.PLAIN, 11));
+        gameStatusArea.setEditable(false);
+        gameStatusArea.setLineWrap(true);
+        gameStatusArea.setWrapStyleWord(true);
+        gameStatusArea.setText("Game server features:\n\n" +
+                "- Supports board sizes from 3x3 to 21x21\n" +
+                "- Real-time game synchronization via UDP\n" +
+                "- Automatic player pairing\n" +
+                "- Move validation and game state tracking\n\n" +
+                "Status: Game server active\n" +
+                "Waiting for players...");
+
+        JScrollPane gameScrollPane = new JScrollPane(gameStatusArea);
+        gameScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        gameMonitorPanel.add(gameScrollPane, BorderLayout.CENTER);
+
+        tabbedPane.addTab("Game Status", gameMonitorPanel);
+
+        add(tabbedPane, BorderLayout.CENTER);
     }
 
     // ==================== START/STOP ALL SERVERS ====================
@@ -327,8 +372,13 @@ class UDPServerCombinedPanel extends JPanel {
         int port;
         try {
             port = Integer.parseInt(txtPort.getText().trim());
+            if (port < 1 || port > 65535) {
+                JOptionPane.showMessageDialog(this, "Port must be in range 1-65535!", "Error",
+                        JOptionPane.ERROR_MESSAGE);
+                return;
+            }
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Port không hợp lệ!", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Port must be an integer!", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -339,14 +389,16 @@ class UDPServerCombinedPanel extends JPanel {
                 chatSocket.setSoTimeout(0); // No timeout - persistent connection
                 chatServerRunning = true;
                 fileServerRunning = true;
-                
+
                 String serverIP = InetAddress.getLocalHost().getHostAddress();
                 appendChat("[UDP] ⚠ Server listening on " + serverIP + ":" + port + " (Connectionless)");
-                
+                appendChat("[Game] Server ready to accept game connections");
+
                 Thread receiveThread = new Thread(() -> combinedReceiveLoop(), "udp-server-receive");
                 receiveThread.start();
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(this, "Error starting server: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Error starting server: " + ex.getMessage(), "Error",
+                        JOptionPane.ERROR_MESSAGE);
                 return;
             }
         }
@@ -370,16 +422,18 @@ class UDPServerCombinedPanel extends JPanel {
             if (chatSocket != null && !chatSocket.isClosed()) {
                 chatSocket.close();
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         chatClients.clear();
         fileClients.clear();
-        
+
         // Close any active file transfers
         for (FileReceiveState state : fileReceiveStates.values()) {
             try {
                 state.close();
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
         fileReceiveStates.clear();
 
@@ -401,43 +455,77 @@ class UDPServerCombinedPanel extends JPanel {
                     chatSocket.receive(packet);
                     byte[] dataBytes = new byte[packet.getLength()];
                     System.arraycopy(packet.getData(), 0, dataBytes, 0, packet.getLength());
-                    String message = new String(dataBytes);
-                    
+                    String message = new String(dataBytes, "UTF-8");
+
                     String clientKey = packet.getAddress().getHostAddress() + ":" + packet.getPort();
                     ClientInfo info = chatClients.get(clientKey);
 
                     // Route by protocol prefix
-                    if (message.startsWith("CMD|LOGIN") || message.startsWith("CMD|REGISTER")) {
-                        // AUTHENTICATION
+                    if (message.startsWith("CMD|LOGIN")) {
+                        // LOGIN - Client sends username and room after authentication at client side
+                        // Format: CMD|LOGIN|username|room
                         String[] authParts = message.split("\\|");
                         if (authParts.length >= 3) {
-                            String action = authParts[1];
-                            String username = authParts[2];
-                            String password = authParts.length > 3 ? authParts[3] : "";
-                            
-                            boolean success = false;
-                            if (action.equals("REGISTER")) {
-                                success = UDPUserManager.register(username, password);
-                            } else if (action.equals("LOGIN")) {
-                                success = UDPUserManager.authenticate(username, password);
-                            }
-                            
-                            if (success) {
-                                info = new ClientInfo(packet.getAddress(), packet.getPort(), username);
+                            String username = authParts[2].trim();
+                            String room = authParts.length >= 4 ? authParts[3].trim() : "default";
+                            if (!username.isEmpty()) {
+                                info = new ClientInfo(packet.getAddress(), packet.getPort(), username, room);
                                 chatClients.put(clientKey, info);
-                                appendChat("✅ [UDP] " + username + " authenticated from " + clientKey);
-                                
+                                appendChat("[UDP] " + username + " connected to room '" + info.room + "' from "
+                                        + clientKey);
+
                                 String response = "CMD|AUTH_OK|WELCOME";
-                                byte[] responseData = response.getBytes();
-                                DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length, 
-                                    packet.getAddress(), packet.getPort());
+                                byte[] responseData = response.getBytes("UTF-8");
+                                DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length,
+                                        packet.getAddress(), packet.getPort());
+                                chatSocket.send(responsePacket);
+                            }
+                        }
+                    } else if (message.startsWith("CMD|CREATE_ROOM")) {
+                        String[] parts = message.split("\\|");
+                        if (parts.length >= 3) {
+                            String roomName = parts[2].trim();
+                            if (info != null) {
+                                info.room = roomName;
+                                appendChat("[Room] " + info.username + " created room '" + roomName + "'");
+                            }
+                        }
+                    } else if (message.startsWith("CMD|JOIN_ROOM")) {
+                        String[] parts = message.split("\\|");
+                        if (parts.length >= 3) {
+                            String roomName = parts[2].trim();
+                            if (info != null) {
+                                info.room = roomName;
+                                appendChat("[Room] " + info.username + " joined room '" + roomName + "'");
+                            }
+                        }
+                    } else if (message.startsWith("CMD|LEAVE_ROOM")) {
+                        if (info != null) {
+                            appendChat("[Room] " + info.username + " left room '" + info.room + "'");
+                            info.room = "default";
+                        }
+                    } else if (message.startsWith("CMD|REGISTER")) {
+                        // REGISTER
+                        String[] authParts = message.split("\\|");
+                        if (authParts.length >= 4) {
+                            String username = authParts[2];
+                            String password = authParts[3];
+
+                            boolean success = UDPUserManager.register(username, password);
+
+                            if (success) {
+                                appendChat("[UDP] " + username + " registered from " + clientKey);
+                                String response = "CMD|REG_OK";
+                                byte[] responseData = response.getBytes("UTF-8");
+                                DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length,
+                                        packet.getAddress(), packet.getPort());
                                 chatSocket.send(responsePacket);
                             } else {
-                                appendChat("❌ [UDP] Auth failed for " + username + " from " + clientKey);
-                                String response = "CMD|AUTH_FAIL";
-                                byte[] responseData = response.getBytes();
-                                DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length, 
-                                    packet.getAddress(), packet.getPort());
+                                appendChat("[UDP] Register failed for " + username + " from " + clientKey);
+                                String response = "CMD|REG_FAIL";
+                                byte[] responseData = response.getBytes("UTF-8");
+                                DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length,
+                                        packet.getAddress(), packet.getPort());
                                 chatSocket.send(responsePacket);
                             }
                         }
@@ -447,14 +535,15 @@ class UDPServerCombinedPanel extends JPanel {
                         if (fileParts.length >= 3) {
                             String fileName = fileParts[1];
                             long fileSize = Long.parseLong(fileParts[2]);
-                            
+
                             String serverPath = "";
                             try {
                                 FileReceiveState state = new FileReceiveState(fileName, fileSize, serverPath);
                                 fileReceiveStates.put(clientKey, state);
-                                appendHistory("📥 [UDP FILE] From " + clientKey + ": " + fileName + " (" + fileSize + " bytes)");
+                                appendHistory(
+                                        "[UDP FILE] From " + clientKey + ": " + fileName + " (" + fileSize + " bytes)");
                             } catch (IOException ex) {
-                                appendHistory("❌ [UDP ERROR] Failed to create file: " + ex.getMessage());
+                                appendHistory("[UDP ERROR] Failed to create file: " + ex.getMessage());
                             }
                         }
                     } else if (message.startsWith("END|")) {
@@ -462,30 +551,37 @@ class UDPServerCombinedPanel extends JPanel {
                         FileReceiveState state = fileReceiveStates.remove(clientKey);
                         if (state != null) {
                             state.close();
-                            appendHistory("✅ [UDP FILE] From " + clientKey + ": Transfer complete (" + state.totalReceived + " bytes received)");
+                            appendHistory("[UDP FILE] From " + clientKey + ": Transfer complete (" + state.totalReceived
+                                    + " bytes received)");
+                            appendHistory("[UDP FILE] Saved to: " + state.getFilePath());
                         }
                     } else if (packet.getLength() > 0 && packet.getData()[0] != 0) {
                         // DATA PACKET - Could be file data or chat message
-                        String messageStr = new String(dataBytes);
-                        
+                        String messageStr = new String(dataBytes, "UTF-8");
+
                         // Check if this is file data (starts with packet number bytes) or chat message
                         boolean couldBeFileData = packet.getLength() >= 4;
                         FileReceiveState state = fileReceiveStates.get(clientKey);
-                        
+
                         if (state != null && couldBeFileData) {
                             // Try to write as file data - skip first 4 bytes (packet number)
                             try {
                                 state.writeData(dataBytes, 4, dataBytes.length - 4);
                             } catch (IOException ex) {
-                                appendHistory("❌ [UDP ERROR] Error writing file data: " + ex.getMessage());
+                                appendHistory("[UDP ERROR] Error writing file data: " + ex.getMessage());
                             }
-                        } else if (info != null && !messageStr.isEmpty() && !messageStr.startsWith("FILEINFO") && !messageStr.startsWith("END")) {
-                            // REGULAR CHAT MESSAGE
-                            appendChat("[" + info.username + "]: " + messageStr);
-                            chatBroadcast("[" + info.username + "]: " + messageStr, clientKey);
+                        } else if (info != null && !messageStr.isEmpty() && !messageStr.startsWith("FILEINFO")
+                                && !messageStr.startsWith("END")) {
+                            // REGULAR CHAT MESSAGE - Only broadcast to clients in same room
+                            appendChat("[" + info.room + "][" + info.username + "]: " + messageStr);
+                            chatBroadcast("[" + info.username + "]: " + messageStr, clientKey, info.room);
                         }
                     }
-                } catch (SocketException e) {
+                } catch (java.io.UnsupportedEncodingException uee) {
+                    if (chatServerRunning || fileServerRunning) {
+                        appendChat("⚠️ [UDP] UTF-8 encoding not supported");
+                    }
+                } catch (java.net.SocketException e) {
                     if (chatServerRunning || fileServerRunning) {
                         appendChat("⚠️ [UDP] Network error: " + e.getMessage());
                     }
@@ -494,7 +590,7 @@ class UDPServerCombinedPanel extends JPanel {
             }
         } catch (Exception ex) {
             if (chatServerRunning || fileServerRunning) {
-                appendChat("❌ [UDP ERROR] " + ex.getClass().getSimpleName() + ": " + ex.getMessage());
+                appendChat("[UDP ERROR] " + ex.getClass().getSimpleName() + ": " + ex.getMessage());
             }
         }
     }
@@ -504,33 +600,33 @@ class UDPServerCombinedPanel extends JPanel {
         JPanel emojiBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
         emojiBar.setBackground(Color.WHITE);
         emojiBar.setBorder(BorderFactory.createMatteBorder(1, 0, 1, 0, Color.LIGHT_GRAY));
-        
+
         // Main emoji picker button
-        JButton emojiPickerBtn = new JButton("▼");
-        emojiPickerBtn.setFont(new Font("Arial", Font.BOLD, 14));
-        emojiPickerBtn.setPreferredSize(new Dimension(40, 35));
+        JButton emojiPickerBtn = new JButton("Emoji");
+        emojiPickerBtn.setFont(new Font("Times New Roman", Font.BOLD, 11));
+        emojiPickerBtn.setPreferredSize(new Dimension(80, 25));
         emojiPickerBtn.setBackground(Color.WHITE);
         emojiPickerBtn.setForeground(Color.BLACK);
         emojiPickerBtn.setFocusPainted(false);
         emojiPickerBtn.setToolTipText("Click to open emoji picker");
         emojiPickerBtn.addActionListener(e -> showEmojiPicker(emojiPickerBtn));
-        
+
         emojiBar.add(emojiPickerBtn);
         return emojiBar;
     }
-    
+
     private void showEmojiPicker(JButton target) {
         JPopupMenu emojiMenu = new JPopupMenu();
         JPanel pickerPanel = new JPanel(new GridLayout(4, 6, 5, 5)); // 4 rows x 6 cols
         pickerPanel.setBackground(Color.WHITE);
-        
+
         // Comprehensive emoji list - using symbols for Java 8 compatibility
         String[] emojis = {
-            "☺", "❤", "✓", "✔","✉", "✍", "☑", "☒"
+                "☺", "❤", "✓", "✔", "✉", "✍", "☑", "☒", "👍", "😊", "💬", "⭐"
         };
-        
+
         Font emojiFont = getEmojiFont(16);
-        
+
         for (String emoji : emojis) {
             JButton btn = new JButton(emoji);
             btn.setFont(emojiFont);
@@ -546,25 +642,25 @@ class UDPServerCombinedPanel extends JPanel {
             });
             pickerPanel.add(btn);
         }
-        
+
         emojiMenu.add(pickerPanel);
         emojiMenu.show(target, 0, target.getHeight());
     }
-    
+
     // Helper method to find emoji-friendly font
     private Font getEmojiFont(int size) {
         try {
             // Try emoji fonts in order of preference (optimized for Windows)
             String[] emojiFontNames = {
-                "Segoe UI Emoji",
-                "Segoe UI Symbol",
-                "Segoe UI",
-                "Noto Color Emoji",
-                "Arial Unicode MS",
-                "Arial",
-                "Dialog"
+                    "Segoe UI Emoji",
+                    "Segoe UI Symbol",
+                    "Segoe UI",
+                    "Noto Color Emoji",
+                    "Arial Unicode MS",
+                    "Arial",
+                    "Dialog"
             };
-            
+
             for (String fontName : emojiFontNames) {
                 Font testFont = new Font(fontName, Font.BOLD, size);
                 // For non-Dialog fonts, return the first available
@@ -579,7 +675,7 @@ class UDPServerCombinedPanel extends JPanel {
         } catch (Exception e) {
             // Fallback on error
         }
-        
+
         // Final fallback with bold style
         return new Font("Segoe UI Emoji", Font.BOLD, size);
     }
@@ -597,26 +693,44 @@ class UDPServerCombinedPanel extends JPanel {
             return;
         }
 
-        appendChat("[Server] Broadcasting: " + str);
+        appendChat("[Server] Broadcasting to all rooms: " + str);
         String broadcastMsg = "[Server] " + str;
-        chatBroadcast(broadcastMsg, null);
+        chatBroadcast(broadcastMsg, null); // Broadcast to all rooms
         inputMessage.setText("");
     }
 
-    private void chatBroadcast(String message, String excludeKey) {
-        byte[] data = message.getBytes();
-        
-        for (ClientInfo client : chatClients.values()) {
-            if (excludeKey != null && excludeKey.contains(client.address.getHostAddress())) {
-                continue;
+    private void chatBroadcast(String message, String excludeKey, String room) {
+        try {
+            byte[] data = message.getBytes("UTF-8");
+
+            // Filter clients by room and send only to clients in the same room
+            for (ClientInfo client : chatClients.values()) {
+                // Only send to clients in the same room
+                if (room != null && !client.room.equals(room)) {
+                    continue;
+                }
+                // Exclude sender by comparing full IP:port, not just IP
+                if (excludeKey != null) {
+                    String clientKey = client.address.getHostAddress() + ":" + client.port;
+                    if (clientKey.equals(excludeKey)) {
+                        continue;
+                    }
+                }
+                try {
+                    DatagramPacket packet = new DatagramPacket(data, data.length, client.address, client.port);
+                    chatSocket.send(packet);
+                } catch (Exception ex) {
+                    appendChat("[UDP WARNING] Failed to send to " + client.username + ": " + ex.getMessage());
+                }
             }
-            try {
-                DatagramPacket packet = new DatagramPacket(data, data.length, client.address, client.port);
-                chatSocket.send(packet);
-            } catch (Exception ex) {
-                appendChat("[UDP WARNING] Failed to send to " + client.username + ": " + ex.getMessage());
-            }
+        } catch (java.io.UnsupportedEncodingException uee) {
+            appendChat("[UDP WARNING] UTF-8 encoding not supported for broadcast");
         }
+    }
+
+    // Overload for backward compatibility (broadcast to all rooms)
+    private void chatBroadcast(String message, String excludeKey) {
+        chatBroadcast(message, excludeKey, null);
     }
 
     private void appendChat(String line) {
@@ -626,19 +740,6 @@ class UDPServerCombinedPanel extends JPanel {
         });
     }
 
-    // ==================== FILE SERVER METHODS ====================
-    private void browseFolder() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        int result = fileChooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            java.io.File selectedFile = fileChooser.getSelectedFile();
-            appendHistory("📂 Transfer folder selected: " + selectedFile.getAbsolutePath());
-            appendHistory("[UDP] Files will be saved to this folder.");
-            viewAvailableFiles();
-        }
-    }
-
     private void selectSingleFile() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
@@ -646,39 +747,8 @@ class UDPServerCombinedPanel extends JPanel {
         if (result == JFileChooser.APPROVE_OPTION) {
             java.io.File selectedFile = fileChooser.getSelectedFile();
             txtSelectedFile.setText(selectedFile.getAbsolutePath());
-            appendHistory("✓ Selected file: " + selectedFile.getName() + " (" + selectedFile.length() + " bytes)");
+            appendHistory("Selected file: " + selectedFile.getName() + " (" + selectedFile.length() + " bytes)");
         }
-    }
-
-    private void viewAvailableFiles() {
-        String path = ".";
-        java.io.File directory = new java.io.File(path);
-        if (!directory.exists() || !directory.isDirectory()) {
-            availableFilesArea.setText("❌ Invalid directory: " + path);
-            return;
-        }
-
-        java.io.File[] files = directory.listFiles();
-        if (files == null || files.length == 0) {
-            availableFilesArea.setText("📭 No files found in current directory");
-            return;
-        }
-
-        StringBuilder fileList = new StringBuilder();
-        fileList.append("📁 Available Files\n");
-        for (int i = 0; i < 80; i++) fileList.append("=");
-        fileList.append("\n");
-        fileList.append("(Use 'Select File' button to choose a file)\n\n");
-        
-        for (java.io.File file : files) {
-            if (file.isFile()) {
-                long sizeKB = file.length() / 1024;
-                fileList.append(String.format("📄 %-48s %8d KB\n", file.getName(), sizeKB));
-            }
-        }
-
-        availableFilesArea.setText(fileList.toString());
-        availableFilesArea.setCaretPosition(0);
     }
 
     private void sendFileToAllClients() {
@@ -701,7 +771,7 @@ class UDPServerCombinedPanel extends JPanel {
 
         new Thread(() -> {
             appendHistory("Sending file: " + file.getName() + " to " + chatClients.size() + " client(s)...");
-            
+
             for (ClientInfo client : chatClients.values()) {
                 new Thread(() -> {
                     try {
@@ -711,20 +781,20 @@ class UDPServerCombinedPanel extends JPanel {
                             return;
                         }
 
-                        // Send file info via UDP message
+                        // Send file info via UDP message with UTF-8 encoding
                         String fileInfo = "FILEINFO|" + file.getName() + "|" + file.length();
-                        byte[] infoBuffer = fileInfo.getBytes();
-                        DatagramPacket infoPacket = new DatagramPacket(infoBuffer, infoBuffer.length, client.address, client.port);
+                        byte[] infoBuffer = fileInfo.getBytes("UTF-8");
+                        DatagramPacket infoPacket = new DatagramPacket(infoBuffer, infoBuffer.length, client.address,
+                                client.port);
                         chatSocket.send(infoPacket);
 
                         // Send file data in chunks
-                        FileInputStream fis = new FileInputStream(file);
-                        byte[] buffer = new byte[512];
-                        int seqNum = 0;
-                        long totalSent = 0;
-                        int read;
+                        try (FileInputStream fis = new FileInputStream(file)) {
+                            byte[] buffer = new byte[512];
+                            int seqNum = 0;
+                            long totalSent = 0;
+                            int read;
 
-                        try {
                             while ((read = fis.read(buffer)) > 0) {
                                 // Prepend sequence number (4 bytes) to data
                                 byte[] dataPacket = new byte[read + 4];
@@ -734,7 +804,8 @@ class UDPServerCombinedPanel extends JPanel {
                                 dataPacket[3] = (byte) (seqNum & 0xFF);
                                 System.arraycopy(buffer, 0, dataPacket, 4, read);
 
-                                DatagramPacket packet = new DatagramPacket(dataPacket, dataPacket.length, client.address, client.port);
+                                DatagramPacket packet = new DatagramPacket(dataPacket, dataPacket.length,
+                                        client.address, client.port);
                                 chatSocket.send(packet);
 
                                 totalSent += read;
@@ -743,16 +814,17 @@ class UDPServerCombinedPanel extends JPanel {
                                 updateProgress(progress);
                             }
 
-                            // Send END marker
+                            // Send END marker with UTF-8 encoding
                             String endMarker = "END|" + file.getName();
-                            byte[] endBuffer = endMarker.getBytes();
-                            DatagramPacket endPacket = new DatagramPacket(endBuffer, endBuffer.length, client.address, client.port);
+                            byte[] endBuffer = endMarker.getBytes("UTF-8");
+                            DatagramPacket endPacket = new DatagramPacket(endBuffer, endBuffer.length, client.address,
+                                    client.port);
                             chatSocket.send(endPacket);
 
                             appendHistory("File sent to client: " + client.username + " (" + totalSent + " bytes)");
-                        } finally {
-                            fis.close();
                         }
+                    } catch (java.io.UnsupportedEncodingException uee) {
+                        appendHistory("Error: UTF-8 encoding not supported for file transfer");
                     } catch (IOException ex) {
                         appendHistory("Error sending to client " + client.username + ": " + ex.getMessage());
                     }
@@ -772,4 +844,3 @@ class UDPServerCombinedPanel extends JPanel {
         SwingUtilities.invokeLater(() -> progressBar.setValue(progress));
     }
 }
-

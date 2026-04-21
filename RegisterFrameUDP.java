@@ -16,7 +16,7 @@ public class RegisterFrameUDP extends JFrame {
         lblUser.setBounds(30, 10, 80, 25);
         add(lblUser);
 
-        txtUser = new JTextField();
+        txtUser = new placeholding("Enter username", 15);
         txtUser.setBounds(120, 10, 120, 25);
         add(txtUser);
 
@@ -36,7 +36,7 @@ public class RegisterFrameUDP extends JFrame {
         txtConfirmPass.setBounds(120, 70, 120, 25);
         add(txtConfirmPass);
 
-        JButton btnRegister = new JButton("Register");
+        JButton btnRegister = new JButton("+ Register");
         btnRegister.setBounds(60, 110, 100, 30);
         add(btnRegister);
 
@@ -78,8 +78,28 @@ public class RegisterFrameUDP extends JFrame {
 
     private boolean registerUserToFile(String user, String pass) {
         try {
+            // Ensure files are properly set up before registration
+            FileSetupUtility.verifyAndSetupFiles();
+            
             File file = new File("dataUDP.txt");
+            
+            // Try to find file in jar directory if not in current directory
+            if (!file.exists()) {
+                try {
+                    String jarPath = RegisterFrameUDP.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+                    file = new File(new File(jarPath).getParent(), "dataUDP.txt");
+                } catch (Exception e) {
+                    file = new File("dataUDP.txt");
+                }
+            }
+            
             String filePath = file.getAbsolutePath();
+
+            // Create file if it doesn't exist
+            if (!file.exists()) {
+                file.getParentFile().mkdirs();
+                file.createNewFile();
+            }
 
             // Check if user already exists
             try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {

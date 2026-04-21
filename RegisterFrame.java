@@ -36,11 +36,11 @@ public class RegisterFrame extends JFrame {
         txtConfirmPass.setBounds(120, 70, 120, 25);
         add(txtConfirmPass);
 
-        JButton btnRegister = new JButton("Register");
+        JButton btnRegister = new JButton("+ Register");
         btnRegister.setBounds(60, 110, 100, 30);
         add(btnRegister);
 
-        JButton btnBack = new JButton("Back");
+        JButton btnBack = new JButton("< Back");
         btnBack.setBounds(170, 110, 100, 30);
         add(btnBack);
 
@@ -78,8 +78,28 @@ public class RegisterFrame extends JFrame {
 
     private boolean registerUserToFile(String user, String pass) {
         try {
+            // Ensure files are properly set up before registration
+            FileSetupUtility.verifyAndSetupFiles();
+            
             File file = new File("data.txt");
+            
+            // Try to find file in jar directory if not in current directory
+            if (!file.exists()) {
+                try {
+                    String jarPath = RegisterFrame.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+                    file = new File(new File(jarPath).getParent(), "data.txt");
+                } catch (Exception e) {
+                    file = new File("data.txt");
+                }
+            }
+            
             String filePath = file.getAbsolutePath();
+
+            // Create file if it doesn't exist
+            if (!file.exists()) {
+                file.getParentFile().mkdirs();
+                file.createNewFile();
+            }
 
             // Check if user already exists
             try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
@@ -109,9 +129,11 @@ public class RegisterFrame extends JFrame {
                     }
                 }
                 writer.append(user).append(",").append(pass).append("\n");
+                System.out.println("User registered to " + filePath);
                 return true;
             }
         } catch (IOException ex) {
+            System.err.println("Error registering user: " + ex.getMessage());
             ex.printStackTrace();
             return false;
         }
